@@ -49,6 +49,7 @@ class IngestionJobRead(BaseModel):
 class DocumentStatusResponse(BaseModel):
     document_id: uuid.UUID
     status: DocumentStatus
+    chunk_count: int
     jobs: list[IngestionJobRead]
 
 

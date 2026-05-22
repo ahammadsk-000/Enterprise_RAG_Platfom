@@ -20,6 +20,8 @@ from app.domains.documents.models.document import Document
 from app.domains.documents.models.ingestion_job import IngestionJob
 from app.domains.documents.repositories.document_repository import DocumentRepository
 from app.domains.documents.repositories.ingestion_job_repository import IngestionJobRepository
+from app.domains.chunking.services.chunking_service import ChunkingService
+from app.domains.embeddings.services.embedding_service import EmbeddingService
 from app.domains.ingestion.parsers.base import ParsedDocument
 from app.domains.ingestion.parsers.registry import get_parser
 from app.domains.ingestion.services.metadata import derive_metadata, detect_language
@@ -39,12 +41,19 @@ class IngestionService:
         jobs: IngestionJobRepository,
         storage: ObjectStorage,
         ocr: OCREngine,
+        *,
+        chunking: ChunkingService | None = None,
+        embedding: EmbeddingService | None = None,
+        chunking_strategy: str | None = None,
     ) -> None:
         self._session = session
         self._docs = documents
         self._jobs = jobs
         self._storage = storage
         self._ocr = ocr
+        self._chunking = chunking
+        self._embedding = embedding
+        self._chunking_strategy = chunking_strategy
 
     async def run(self, document_id: uuid.UUID) -> None:
         document = await self._docs.get(document_id)
@@ -63,8 +72,31 @@ class IngestionService:
             await self._run_stage(
                 document, IngestionStage.METADATA, lambda: self._extract_metadata(document, parsed)
             )
-            document.status = DocumentStatus.PARSED.value
-            logger.info("ingestion.completed", document_id=str(document_id), pages=document.page_count)
+
+            if self._chunking is not None and self._embedding is not None:
+                document.status = DocumentStatus.CHUNKING.value
+                await self._session.flush()
+                chunks = await self._run_stage(
+                    document, IngestionStage.CHUNK, lambda: self._chunk(document, parsed)
+                )
+                document.status = DocumentStatus.EMBEDDING.value
+                await self._session.flush()
+                indexed = await self._run_stage(
+                    document, IngestionStage.INDEX, lambda: self._index(document, chunks)
+                )
+                document.doc_metadata = {
+                    **document.doc_metadata,
+                    "chunk_count": len(chunks),
+                    "indexed_vectors": indexed,
+                }
+                document.status = DocumentStatus.INDEXED.value
+                logger.info(
+                    "ingestion.indexed", document_id=str(document_id),
+                    chunks=len(chunks), vectors=indexed,
+                )
+            else:
+                document.status = DocumentStatus.PARSED.value
+                logger.info("ingestion.parsed", document_id=str(document_id), pages=document.page_count)
         except Exception as exc:  # noqa: BLE001 - any stage failure marks the doc FAILED
             document.status = DocumentStatus.FAILED.value
             document.error = str(exc)
@@ -85,6 +117,14 @@ class IngestionService:
         document.page_count = parsed.page_count
         document.language = detect_language(parsed.text)
         document.doc_metadata = {**document.doc_metadata, **derive_metadata(parsed)}
+
+    async def _chunk(self, document: Document, parsed: ParsedDocument) -> list:  # type: ignore[type-arg]
+        assert self._chunking is not None
+        return await self._chunking.chunk_document(document, parsed, strategy=self._chunking_strategy)
+
+    async def _index(self, document: Document, chunks: list) -> int:  # type: ignore[type-arg]
+        assert self._embedding is not None
+        return await self._embedding.embed_and_index(document, chunks)
 
     # ── Job bookkeeping ───────────────────────────────────────────────────────
     async def _run_stage(

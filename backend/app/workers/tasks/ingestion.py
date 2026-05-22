@@ -18,21 +18,41 @@ logger = get_logger(__name__)
 
 async def _run(document_id: uuid.UUID) -> None:
     from app.db.session import AsyncSessionLocal
+    from app.domains.chunking.repositories.chunk_repository import SqlAlchemyChunkRepository
+    from app.domains.chunking.services.chunking_service import ChunkingService
     from app.domains.documents.repositories.document_repository import SqlAlchemyDocumentRepository
     from app.domains.documents.repositories.ingestion_job_repository import (
         SqlAlchemyIngestionJobRepository,
     )
+    from app.domains.embeddings.repositories.embedding_version_repository import (
+        SqlAlchemyEmbeddingVersionRepository,
+    )
+    from app.domains.embeddings.services.embedding_service import EmbeddingService
     from app.domains.ingestion.services.ingestion_service import IngestionService
+    from app.integrations.cache.embedding_cache import get_embedding_cache
+    from app.integrations.embeddings.factory import get_embedding_provider
     from app.integrations.ocr.factory import get_ocr_engine
     from app.integrations.storage.factory import get_object_storage
+    from app.integrations.vectorstore.factory import get_vector_store
 
     async with AsyncSessionLocal() as session:
+        chunk_repo = SqlAlchemyChunkRepository(session)
+        chunking = ChunkingService(session, chunk_repo)
+        embedding = EmbeddingService(
+            session=session,
+            versions=SqlAlchemyEmbeddingVersionRepository(session),
+            provider=get_embedding_provider(),
+            vector_store=get_vector_store(),
+            cache=get_embedding_cache(),
+        )
         service = IngestionService(
             session=session,
             documents=SqlAlchemyDocumentRepository(session),
             jobs=SqlAlchemyIngestionJobRepository(session),
             storage=get_object_storage(),
             ocr=get_ocr_engine(),
+            chunking=chunking,
+            embedding=embedding,
         )
         await service.run(document_id)
 

@@ -96,12 +96,27 @@ async def document_status(
     document_id: uuid.UUID, principal: CurrentPrincipal, service: DocumentServiceDep
 ) -> DocumentStatusResponse:
     assert principal.organization_id is not None
-    document, jobs = await service.status(document_id, principal.organization_id)
+    document, jobs, chunk_count = await service.status(document_id, principal.organization_id)
     return DocumentStatusResponse(
         document_id=document.id,
         status=document.status,  # type: ignore[arg-type]
+        chunk_count=chunk_count,
         jobs=[IngestionJobRead.model_validate(j) for j in jobs],
     )
+
+
+@router.post(
+    "/{document_id}/reindex",
+    response_model=DocumentRead,
+    dependencies=[Depends(require_permission(Permission.DOCUMENTS_WRITE))],
+)
+async def reindex_document(
+    document_id: uuid.UUID, principal: CurrentPrincipal, service: DocumentServiceDep
+) -> DocumentRead:
+    """Re-run chunking + embedding for a document (e.g. after changing strategy/model)."""
+    assert principal.organization_id is not None
+    document = await service.reindex(document_id, principal.organization_id)
+    return DocumentRead.model_validate(document)
 
 
 @router.delete(

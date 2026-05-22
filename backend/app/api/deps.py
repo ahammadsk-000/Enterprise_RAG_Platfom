@@ -24,11 +24,13 @@ from app.domains.identity.repositories.user_repository import SqlAlchemyUserRepo
 from app.domains.identity.schemas.auth import Principal
 from app.domains.identity.services.auth_service import AuthService
 from app.domains.identity.services.rbac import ensure_permission
+from app.domains.chunking.repositories.chunk_repository import SqlAlchemyChunkRepository
 from app.domains.documents.repositories.document_repository import SqlAlchemyDocumentRepository
 from app.domains.documents.repositories.ingestion_job_repository import SqlAlchemyIngestionJobRepository
 from app.domains.documents.services.document_service import DocumentService
 from app.domains.ingestion.task_bus import CeleryTaskBus, TaskBus
 from app.integrations.storage.factory import get_object_storage
+from app.integrations.vectorstore.factory import get_vector_store
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -87,7 +89,9 @@ def get_document_service(session: DbSession, task_bus: TaskBusDep) -> DocumentSe
         session=session,
         documents=SqlAlchemyDocumentRepository(session),
         jobs=SqlAlchemyIngestionJobRepository(session),
+        chunks=SqlAlchemyChunkRepository(session),
         storage=get_object_storage(),
+        vector_store=get_vector_store(),
         task_bus=task_bus,
     )
 

@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
+from app.domains.chunking.repositories.chunk_repository import ChunkRepository
 from app.domains.documents.enums import DocumentStatus
 from app.domains.documents.models.document import Document
 from app.domains.documents.models.ingestion_job import IngestionJob
@@ -22,6 +23,8 @@ from app.domains.ingestion.parsers.registry import get_parser, guess_mime
 from app.domains.ingestion.services.metadata import content_hash
 from app.domains.ingestion.task_bus import TaskBus
 from app.integrations.storage.base import ObjectStorage
+from app.integrations.vectorstore.base import VectorStore
+from app.integrations.vectorstore.factory import collection_name
 
 
 class DocumentService:
@@ -30,13 +33,17 @@ class DocumentService:
         session: AsyncSession,
         documents: DocumentRepository,
         jobs: IngestionJobRepository,
+        chunks: ChunkRepository,
         storage: ObjectStorage,
+        vector_store: VectorStore,
         task_bus: TaskBus,
     ) -> None:
         self._session = session
         self._docs = documents
         self._jobs = jobs
+        self._chunks = chunks
         self._storage = storage
+        self._vectors = vector_store
         self._task_bus = task_bus
 
     async def upload(
@@ -91,13 +98,27 @@ class DocumentService:
             organization_id, workspace_id=workspace_id, limit=limit, offset=offset
         )
 
-    async def status(self, document_id: uuid.UUID, organization_id: uuid.UUID) -> tuple[Document, Sequence[IngestionJob]]:
+    async def status(
+        self, document_id: uuid.UUID, organization_id: uuid.UUID
+    ) -> tuple[Document, Sequence[IngestionJob], int]:
         document = await self.get(document_id, organization_id)
         jobs = await self._jobs.list_for_document(document.id)
-        return document, jobs
+        chunk_count = await self._chunks.count_for_document(document.id)
+        return document, jobs, chunk_count
+
+    async def reindex(self, document_id: uuid.UUID, organization_id: uuid.UUID) -> Document:
+        """Re-run the ingestion pipeline (chunking is idempotent: old chunks are replaced)."""
+        document = await self.get(document_id, organization_id)
+        document.status = DocumentStatus.UPLOADED.value
+        document.error = None
+        await self._session.commit()
+        self._task_bus.enqueue_ingestion(document.id)
+        return document
 
     async def delete(self, document_id: uuid.UUID, organization_id: uuid.UUID) -> None:
         document = await self.get(document_id, organization_id)
+        # Remove vectors first (best-effort); chunk rows cascade with the document.
+        await self._vectors.delete_by_document(collection_name(organization_id), document.id)
         await self._storage.delete_object(document.storage_key)
         if document.text_storage_key:
             await self._storage.delete_object(document.text_storage_key)

@@ -6,9 +6,9 @@ reasoning, citation-grounded streaming answers, evaluation, and full observabili
 Built FastAPI-first with clean architecture, async-everywhere, and Kubernetes-ready
 deployment.
 
-> Status: **Phase 2 — document ingestion** complete (auth/RBAC/SSO + ingestion
-> pipeline). See the roadmap below and the design docs in
-> [`docs/architecture/`](docs/architecture/).
+> Status: **Phase 3 — chunking + embeddings + Qdrant** complete (auth/RBAC/SSO,
+> ingestion, and the chunk→embed→index pipeline). See the roadmap below and the
+> design docs in [`docs/architecture/`](docs/architecture/).
 
 ## Architecture
 
