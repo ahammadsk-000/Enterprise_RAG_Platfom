@@ -18,7 +18,7 @@ celery_app = Celery(
     broker=str(_settings.redis.dsn),
     backend=str(_settings.redis.dsn),
     include=[
-        # "app.workers.tasks.ingestion",
+        "app.workers.tasks.ingestion",
         # "app.workers.tasks.embedding",
         # "app.workers.tasks.graph",
     ],

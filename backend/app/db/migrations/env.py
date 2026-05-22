@@ -20,6 +20,7 @@ from app.db.base import Base
 
 # Import model modules so they register on Base.metadata (extended per phase):
 from app.domains.identity import models as _identity_models  # noqa: F401,E402
+from app.domains.documents import models as _document_models  # noqa: F401,E402
 
 config = context.config
 if config.config_file_name is not None:
