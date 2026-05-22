@@ -1,0 +1,126 @@
+# Full local stack for the Enterprise RAG Platform.
+#   docker compose up -d        # bring everything up
+#   docker compose logs -f api  # tail the API
+# Backing services expose host ports for local debugging.
+
+x-backend-build: &backend-build
+  build:
+    context: .
+    dockerfile: infra/docker/backend.Dockerfile
+
+x-backend-env: &backend-env
+  env_file: [backend/.env.example]
+  environment:
+    POSTGRES_HOST: postgres
+    REDIS_HOST: redis
+    QDRANT_HOST: qdrant
+    NEO4J_URI: bolt://neo4j:7687
+    STORAGE_ENDPOINT_URL: http://minio:9000
+    LLM_BASE_URL: http://ollama:11434
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+
+services:
+  api:
+    <<: [*backend-build, *backend-env]
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes: ["./backend:/app"]
+    ports: ["8000:8000"]
+    depends_on: [postgres, redis, qdrant, minio]
+
+  worker:
+    <<: [*backend-build, *backend-env]
+    command: ["celery", "-A", "app.workers.celery_app.celery_app", "worker",
+              "-Q", "default,ocr,parse,chunk,embed,index,graph,eval", "--loglevel=INFO"]
+    volumes: ["./backend:/app"]
+    depends_on: [postgres, redis, qdrant]
+
+  beat:
+    <<: [*backend-build, *backend-env]
+    command: ["celery", "-A", "app.workers.celery_app.celery_app", "beat", "--loglevel=INFO"]
+    volumes: ["./backend:/app"]
+    depends_on: [redis]
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: rag
+      POSTGRES_DB: enterprise_rag
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    volumes: ["redisdata:/data"]
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports: ["6333:6333", "6334:6334"]
+    volumes: ["qdrantdata:/qdrant/storage"]
+
+  neo4j:
+    image: neo4j:5-community
+    environment:
+      NEO4J_AUTH: neo4j/neo4j_password
+    ports: ["7474:7474", "7687:7687"]
+    volumes: ["neo4jdata:/data"]
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports: ["9000:9000", "9001:9001"]
+    volumes: ["miniodata:/data"]
+
+  ollama:
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes: ["ollamadata:/root/.ollama"]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes: ["./infra/observability/otel-collector.yaml:/etc/otel/config.yaml"]
+    ports: ["4317:4317", "4318:4318"]
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes: ["./infra/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml"]
+    ports: ["9090:9090"]
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports: ["3000:3000"]
+    volumes: ["grafanadata:/var/lib/grafana"]
+    depends_on: [prometheus, loki]
+
+  loki:
+    image: grafana/loki:latest
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    ports: ["3100:3100"]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../infra/docker/frontend.Dockerfile
+    ports: ["5173:80"]
+    depends_on: [api]
+
+volumes:
+  pgdata:
+  redisdata:
+  qdrantdata:
+  neo4jdata:
+  miniodata:
+  ollamadata:
+  grafanadata:
