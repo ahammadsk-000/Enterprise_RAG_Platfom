@@ -38,6 +38,9 @@ from app.domains.rag.services.rag_service import RagService
 from app.domains.retrieval.repositories.retrieval_log_repository import SqlAlchemyRetrievalLogRepository
 from app.domains.workspaces.repositories.workspace_repository import SqlAlchemyWorkspaceRepository
 from app.domains.workspaces.services.workspace_service import WorkspaceService
+from app.domains.graphrag.extractors.factory import get_entity_extractor
+from app.domains.graphrag.services.graph_service import GraphRetrievalService
+from app.integrations.graphstore.factory import get_graph_store
 from app.domains.retrieval.retrievers.bm25 import BM25Retriever
 from app.domains.retrieval.retrievers.dense import DenseRetriever
 from app.domains.retrieval.services.retrieval_service import RetrievalService
@@ -158,3 +161,11 @@ def get_chat_service(session: DbSession) -> ChatService:
 
 WorkspaceServiceDep = Annotated[WorkspaceService, Depends(get_workspace_service)]
 ChatServiceDep = Annotated[ChatService, Depends(get_chat_service)]
+
+
+# ── Graph RAG ────────────────────────────────────────────────────────────────
+def get_graph_retrieval_service() -> GraphRetrievalService:
+    return GraphRetrievalService(get_entity_extractor(), get_graph_store())
+
+
+GraphRetrievalDep = Annotated[GraphRetrievalService, Depends(get_graph_retrieval_service)]

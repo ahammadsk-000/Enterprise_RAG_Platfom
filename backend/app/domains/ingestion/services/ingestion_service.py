@@ -22,6 +22,7 @@ from app.domains.documents.repositories.document_repository import DocumentRepos
 from app.domains.documents.repositories.ingestion_job_repository import IngestionJobRepository
 from app.domains.chunking.services.chunking_service import ChunkingService
 from app.domains.embeddings.services.embedding_service import EmbeddingService
+from app.domains.graphrag.services.graph_service import GraphBuilder
 from app.domains.ingestion.parsers.base import ParsedDocument
 from app.domains.ingestion.parsers.registry import get_parser
 from app.domains.ingestion.services.metadata import derive_metadata, detect_language
@@ -44,6 +45,7 @@ class IngestionService:
         *,
         chunking: ChunkingService | None = None,
         embedding: EmbeddingService | None = None,
+        graph_builder: "GraphBuilder | None" = None,
         chunking_strategy: str | None = None,
     ) -> None:
         self._session = session
@@ -53,6 +55,7 @@ class IngestionService:
         self._ocr = ocr
         self._chunking = chunking
         self._embedding = embedding
+        self._graph_builder = graph_builder
         self._chunking_strategy = chunking_strategy
 
     async def run(self, document_id: uuid.UUID) -> None:
@@ -97,6 +100,12 @@ class IngestionService:
             else:
                 document.status = DocumentStatus.PARSED.value
                 logger.info("ingestion.parsed", document_id=str(document_id), pages=document.page_count)
+
+            if self._graph_builder is not None:
+                entities = await self._run_stage(
+                    document, IngestionStage.GRAPH, lambda: self._build_graph(document, parsed)
+                )
+                document.doc_metadata = {**document.doc_metadata, "graph_entities": entities}
         except Exception as exc:  # noqa: BLE001 - any stage failure marks the doc FAILED
             document.status = DocumentStatus.FAILED.value
             document.error = str(exc)
@@ -125,6 +134,12 @@ class IngestionService:
     async def _index(self, document: Document, chunks: list) -> int:  # type: ignore[type-arg]
         assert self._embedding is not None
         return await self._embedding.embed_and_index(document, chunks)
+
+    async def _build_graph(self, document: Document, parsed: ParsedDocument) -> int:
+        assert self._graph_builder is not None
+        return await self._graph_builder.build_from_text(
+            organization_id=document.organization_id, document_id=document.id, text=parsed.text
+        )
 
     # ── Job bookkeeping ───────────────────────────────────────────────────────
     async def _run_stage(

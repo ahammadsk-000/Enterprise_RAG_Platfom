@@ -28,9 +28,12 @@ async def _run(document_id: uuid.UUID) -> None:
         SqlAlchemyEmbeddingVersionRepository,
     )
     from app.domains.embeddings.services.embedding_service import EmbeddingService
+    from app.domains.graphrag.extractors.factory import get_entity_extractor
+    from app.domains.graphrag.services.graph_service import GraphBuilder
     from app.domains.ingestion.services.ingestion_service import IngestionService
     from app.integrations.cache.embedding_cache import get_embedding_cache
     from app.integrations.embeddings.factory import get_embedding_provider
+    from app.integrations.graphstore.factory import get_graph_store
     from app.integrations.ocr.factory import get_ocr_engine
     from app.integrations.storage.factory import get_object_storage
     from app.integrations.vectorstore.factory import get_vector_store
@@ -45,6 +48,7 @@ async def _run(document_id: uuid.UUID) -> None:
             vector_store=get_vector_store(),
             cache=get_embedding_cache(),
         )
+        graph_builder = GraphBuilder(get_entity_extractor(), get_graph_store())
         service = IngestionService(
             session=session,
             documents=SqlAlchemyDocumentRepository(session),
@@ -53,6 +57,7 @@ async def _run(document_id: uuid.UUID) -> None:
             ocr=get_ocr_engine(),
             chunking=chunking,
             embedding=embedding,
+            graph_builder=graph_builder,
         )
         await service.run(document_id)
 
