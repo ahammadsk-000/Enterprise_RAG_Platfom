@@ -1,0 +1,52 @@
+Retrieval-Augmented Generation: A Technical Overview
+
+What is RAG?
+Retrieval-Augmented Generation (RAG) is an architecture that grounds a large language
+model's answers in an external knowledge base. Instead of relying only on what the
+model memorized during training, a RAG system retrieves relevant passages from a
+document corpus at query time and provides them to the model as context. This reduces
+hallucination and lets the system answer questions about private or recent data.
+
+Ingestion pipeline
+Documents are first parsed into text. Scanned PDFs and images fall back to optical
+character recognition. The extracted text is split into chunks. Chunking strategies
+include fixed-size recursive splitting, sentence-aware semantic chunking, and
+parent-child chunking where small child chunks are embedded for recall while larger
+parent chunks supply context. Each chunk is converted into a vector embedding and
+stored in a vector database along with metadata such as the document id and page.
+
+Hybrid retrieval
+At query time the system runs two retrievers in parallel. Dense retrieval embeds the
+query and finds the nearest chunk vectors by cosine similarity. Sparse retrieval, often
+BM25, matches exact keywords. The two result lists are combined with Reciprocal Rank
+Fusion, which is robust to differences in score scale. A cross-encoder re-ranker then
+re-scores the fused candidates for higher precision, and a compression step trims the
+context to fit the model's token budget.
+
+Grounded generation and citations
+The retrieved context is inserted into a prompt that instructs the model to answer
+only from the supplied sources and to cite each claim with a bracketed marker such as
+[1]. The system parses these markers to build citations that link back to the exact
+chunk, page, and document. A confidence score combines retrieval strength with how
+much of the answer is supported by citations.
+
+Graph RAG
+Graph RAG augments vector search with a knowledge graph. During ingestion the system
+extracts entities and the relationships between them and stores them in a graph
+database such as Neo4j. At query time it can traverse the neighborhood of matched
+entities, which is especially useful for multi-hop questions like how two people or
+organizations are connected.
+
+Agentic retrieval
+An agentic RAG system decomposes a complex question into sub-questions with a planner,
+retrieves evidence for each, summarizes a draft answer, and then verifies that every
+claim is supported before returning. If verification fails the system can retrieve
+again with a broader query. Frameworks such as LangGraph model this as a state machine
+of specialized agents.
+
+Evaluation
+RAG systems are evaluated on metrics including faithfulness, which measures whether the
+answer is grounded in the retrieved context; answer relevancy; context precision and
+recall; and a hallucination rate. Teams maintain golden datasets of questions with
+ground-truth answers and run scored evaluations as a regression gate before shipping
+changes.

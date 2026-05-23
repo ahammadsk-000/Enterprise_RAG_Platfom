@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Incident Post-Mortem — INC-2024-07</title>
+    <style>body { font-family: sans-serif; }</style>
+  </head>
+  <body>
+    <h1>Incident Post-Mortem: INC-2024-07</h1>
+    <p><strong>Severity:</strong> High &middot; <strong>Date:</strong> 14 July 2024
+       &middot; <strong>Author:</strong> Omar Said &middot; <strong>Reviewed by:</strong> Raj Patel</p>
+
+    <h2>Summary</h2>
+    <p>On 14 July 2024, the SentinelGuard analytics backend experienced a 42-minute
+       partial outage in the US-East region. Approximately 18% of customers saw delayed
+       alert delivery. No detections were lost because sensors buffered events locally,
+       in line with the product's design.</p>
+
+    <h2>Impact</h2>
+    <p>Alert delivery latency rose from a normal median of 3 seconds to about 9 minutes
+       during the incident. The customer portal remained available. The DataShield Cloud
+       product was unaffected. The 99.9% uptime SLA was not breached for the month.</p>
+
+    <h2>Root cause</h2>
+    <p>A configuration change to the message queue reduced the consumer concurrency from
+       64 to 4, creating a processing backlog. The change passed code review but was not
+       caught because the staging environment runs at lower traffic and did not reproduce
+       the backlog.</p>
+
+    <h2>Resolution</h2>
+    <p>The on-call engineer, Dana Klein, identified the queue backlog within 11 minutes
+       and reverted the configuration change. The backlog drained over the following
+       20 minutes and alert latency returned to normal by 15:02 UTC.</p>
+
+    <h2>Action items</h2>
+    <ul>
+      <li>Add an alert on consumer concurrency dropping below 32. Owner: Engineering.</li>
+      <li>Run load tests against staging at production-equivalent traffic. Owner: Raj Patel.</li>
+      <li>Require a second reviewer for any change to queue configuration. Owner: People Ops.</li>
+      <li>Publish a customer-facing status note within 30 minutes of any High incident.</li>
+    </ul>
+
+    <h2>Lessons learned</h2>
+    <p>Local sensor buffering worked exactly as designed and prevented data loss.
+       The gap was in change validation: staging must mirror production load for
+       infrastructure changes to be meaningful.</p>
+  </body>
+</html>

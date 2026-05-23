@@ -1,0 +1,48 @@
+SentinelGuard — Product FAQ
+
+What is SentinelGuard?
+SentinelGuard is Acme Corp's real-time network intrusion detection platform. It
+inspects network traffic and uses behavioral analytics to flag anomalies such as
+lateral movement, data exfiltration, and brute-force login attempts. It is designed
+for security operations teams that need alerts in seconds rather than minutes.
+
+How is SentinelGuard deployed?
+SentinelGuard runs as a set of lightweight sensors deployed inside your network plus
+a cloud-hosted analytics backend. Sensors are available as a Docker container, a
+Kubernetes DaemonSet, or a hardware appliance. Most customers are fully deployed
+within one business day.
+
+What does SentinelGuard cost?
+SentinelGuard is priced per protected seat on an annual contract. There are three
+tiers: Standard, Professional, and Enterprise. The Enterprise tier adds single
+sign-on, custom detection rules, and a dedicated customer success manager. Volume
+discounts apply above 1,000 seats. Contact sales for a quote.
+
+What is the uptime guarantee?
+Enterprise customers receive a 99.9 percent uptime SLA for the analytics backend.
+Critical incidents are acknowledged within 15 minutes, 24 hours a day, 7 days a week.
+Sensors continue buffering events locally if connectivity to the backend is lost, so
+no detections are missed during a brief outage.
+
+How are detections tuned?
+SentinelGuard ships with hundreds of built-in detection rules mapped to the MITRE
+ATT&CK framework. Professional and Enterprise customers can write custom rules in a
+simple YAML format. Every rule can be set to alert-only or auto-block. False positives
+can be suppressed per source, per rule, or per time window.
+
+How does SentinelGuard integrate with other tools?
+SentinelGuard exports alerts to Slack, PagerDuty, Splunk, and any generic webhook. It
+also offers a REST API and a Python SDK so teams can build custom automations. The
+DataShield Cloud product integrates natively so that encrypted stores are monitored
+without exposing plaintext.
+
+What support is included?
+Standard includes email support during business hours. Professional adds a shared
+Slack channel. Enterprise adds 24/7 phone support, the 99.9 percent SLA, and a named
+customer success manager. All tiers have access to the documentation portal and the
+community forum.
+
+Who do I contact for security issues?
+Report suspected vulnerabilities to the Acme security team through the customer portal.
+Acme is SOC 2 Type II certified and GDPR compliant, and runs a private bug-bounty
+program for Enterprise customers.
