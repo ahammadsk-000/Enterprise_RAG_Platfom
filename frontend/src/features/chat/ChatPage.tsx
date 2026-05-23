@@ -36,24 +36,28 @@ export function ChatPage() {
 
   const conversations = useQuery({ queryKey: ["conversations"], queryFn: () => api.listConversations() });
 
-  // Load history when switching conversations.
-  useEffect(() => {
-    if (!selectedId) {
-      setMessages([]);
-      return;
-    }
-    api.listMessages(selectedId).then((msgs) =>
-      setMessages(
-        msgs.map((m) => ({
-          id: m.id,
-          role: m.role === "assistant" ? "assistant" : "user",
-          content: m.content,
-          citations: m.citations,
-          confidence: m.confidence,
-        })),
-      ),
+  // Load history only when the user explicitly opens an existing conversation
+  // (NOT when send() creates one — that would race with and wipe the streaming answer).
+  async function selectConversation(id: string) {
+    if (streaming) return;
+    setSelectedId(id);
+    const msgs = await api.listMessages(id);
+    setMessages(
+      msgs.map((m) => ({
+        id: m.id,
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: m.content,
+        citations: m.citations,
+        confidence: m.confidence,
+      })),
     );
-  }, [selectedId]);
+  }
+
+  function newChat() {
+    if (streaming) return;
+    setSelectedId(null);
+    setMessages([]);
+  }
 
   // Close the socket on unmount.
   useEffect(() => () => socketRef.current?.close(), []);
@@ -132,20 +136,14 @@ export function ChatPage() {
     <div className="flex h-[calc(100vh-4rem)] gap-4">
       {/* Conversation sidebar */}
       <div className="flex w-56 flex-col">
-        <Button
-          className="mb-3 w-full"
-          onClick={() => {
-            setSelectedId(null);
-            setMessages([]);
-          }}
-        >
+        <Button className="mb-3 w-full" onClick={newChat}>
           + New chat
         </Button>
         <div className="flex-1 space-y-1 overflow-y-auto">
           {conversations.data?.map((c) => (
             <button
               key={c.id}
-              onClick={() => setSelectedId(c.id)}
+              onClick={() => void selectConversation(c.id)}
               className={`w-full truncate rounded-md px-3 py-2 text-left text-sm transition ${
                 selectedId === c.id ? "bg-slate-800 text-white" : "text-slate-400 hover:bg-slate-800/60"
               }`}
