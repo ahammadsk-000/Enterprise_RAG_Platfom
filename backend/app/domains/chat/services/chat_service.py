@@ -32,6 +32,8 @@ logger = get_logger(__name__)
 
 _HISTORY_TURNS = 8
 _MAX_CONTEXT_TOKENS = 3000
+_DEFAULT_TITLE = "New conversation"
+_TITLE_MAX = 60
 
 
 class ChatService:
@@ -146,6 +148,10 @@ class ChatService:
         self, conversation: Conversation, user_id: uuid.UUID, req: ChatRequest
     ) -> tuple[Sequence[Message], list[RetrievedChunk]]:
         history = await self._messages.recent(conversation.id, _HISTORY_TURNS)
+        # Auto-title the conversation from its first question.
+        if conversation.title in (None, "", _DEFAULT_TITLE) and not any(m.role == "user" for m in history):
+            title = " ".join(req.query.split())[:_TITLE_MAX]
+            conversation.title = title + ("…" if len(req.query.strip()) > _TITLE_MAX else "")
         await self._messages.add(
             Message(conversation_id=conversation.id, role="user", content=req.query)
         )
