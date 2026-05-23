@@ -24,6 +24,8 @@ from app.domains.documents import models as _document_models  # noqa: F401,E402
 from app.domains.embeddings import models as _embedding_models  # noqa: F401,E402
 from app.domains.chunking import models as _chunk_models  # noqa: F401,E402
 from app.domains.retrieval import models as _retrieval_models  # noqa: F401,E402
+from app.domains.workspaces import models as _workspace_models  # noqa: F401,E402
+from app.domains.chat import models as _chat_models  # noqa: F401,E402
 
 config = context.config
 if config.config_file_name is not None:

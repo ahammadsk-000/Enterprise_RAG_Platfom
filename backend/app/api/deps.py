@@ -29,8 +29,15 @@ from app.domains.documents.repositories.document_repository import SqlAlchemyDoc
 from app.domains.documents.repositories.ingestion_job_repository import SqlAlchemyIngestionJobRepository
 from app.domains.documents.services.document_service import DocumentService
 from app.domains.ingestion.task_bus import CeleryTaskBus, TaskBus
+from app.domains.chat.repositories.conversation_repository import (
+    SqlAlchemyConversationRepository,
+    SqlAlchemyMessageRepository,
+)
+from app.domains.chat.services.chat_service import ChatService
 from app.domains.rag.services.rag_service import RagService
 from app.domains.retrieval.repositories.retrieval_log_repository import SqlAlchemyRetrievalLogRepository
+from app.domains.workspaces.repositories.workspace_repository import SqlAlchemyWorkspaceRepository
+from app.domains.workspaces.services.workspace_service import WorkspaceService
 from app.domains.retrieval.retrievers.bm25 import BM25Retriever
 from app.domains.retrieval.retrievers.dense import DenseRetriever
 from app.domains.retrieval.services.retrieval_service import RetrievalService
@@ -128,3 +135,26 @@ def get_rag_service(session: DbSession) -> RagService:
 
 RetrievalServiceDep = Annotated[RetrievalService, Depends(get_retrieval_service)]
 RagServiceDep = Annotated[RagService, Depends(get_rag_service)]
+
+
+# ── Workspaces / Chat ────────────────────────────────────────────────────────
+def get_workspace_service(session: DbSession) -> WorkspaceService:
+    return WorkspaceService(session, SqlAlchemyWorkspaceRepository(session))
+
+
+def build_chat_service(session: AsyncSession) -> ChatService:
+    return ChatService(
+        session=session,
+        conversations=SqlAlchemyConversationRepository(session),
+        messages=SqlAlchemyMessageRepository(session),
+        retrieval=_build_retrieval_service(session),
+        llm=get_llm_provider(),
+    )
+
+
+def get_chat_service(session: DbSession) -> ChatService:
+    return build_chat_service(session)
+
+
+WorkspaceServiceDep = Annotated[WorkspaceService, Depends(get_workspace_service)]
+ChatServiceDep = Annotated[ChatService, Depends(get_chat_service)]
