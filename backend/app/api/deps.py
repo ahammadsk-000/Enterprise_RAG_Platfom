@@ -41,6 +41,9 @@ from app.domains.workspaces.services.workspace_service import WorkspaceService
 from app.domains.graphrag.extractors.factory import get_entity_extractor
 from app.domains.graphrag.services.graph_service import GraphRetrievalService
 from app.integrations.graphstore.factory import get_graph_store
+from app.domains.agents.graph.orchestrator import ResearchAgentGraph
+from app.domains.agents.repositories.agent_repository import SqlAlchemyAgentRunRepository
+from app.domains.agents.services.agent_service import AgentService
 from app.domains.retrieval.retrievers.bm25 import BM25Retriever
 from app.domains.retrieval.retrievers.dense import DenseRetriever
 from app.domains.retrieval.services.retrieval_service import RetrievalService
@@ -169,3 +172,12 @@ def get_graph_retrieval_service() -> GraphRetrievalService:
 
 
 GraphRetrievalDep = Annotated[GraphRetrievalService, Depends(get_graph_retrieval_service)]
+
+
+# ── Agents ───────────────────────────────────────────────────────────────────
+def get_agent_service(session: DbSession) -> AgentService:
+    graph = ResearchAgentGraph(_build_retrieval_service(session), get_llm_provider())
+    return AgentService(session, graph, SqlAlchemyAgentRunRepository(session))
+
+
+AgentServiceDep = Annotated[AgentService, Depends(get_agent_service)]
