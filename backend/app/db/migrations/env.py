@@ -27,6 +27,7 @@ from app.domains.retrieval import models as _retrieval_models  # noqa: F401,E402
 from app.domains.workspaces import models as _workspace_models  # noqa: F401,E402
 from app.domains.chat import models as _chat_models  # noqa: F401,E402
 from app.domains.agents import models as _agent_models  # noqa: F401,E402
+from app.domains.evaluation import models as _eval_models  # noqa: F401,E402
 
 config = context.config
 if config.config_file_name is not None:

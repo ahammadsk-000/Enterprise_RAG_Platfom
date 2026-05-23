@@ -44,6 +44,8 @@ from app.integrations.graphstore.factory import get_graph_store
 from app.domains.agents.graph.orchestrator import ResearchAgentGraph
 from app.domains.agents.repositories.agent_repository import SqlAlchemyAgentRunRepository
 from app.domains.agents.services.agent_service import AgentService
+from app.domains.evaluation.repositories.eval_repository import SqlAlchemyEvalRepository
+from app.domains.evaluation.services.eval_service import EvalService
 from app.domains.retrieval.retrievers.bm25 import BM25Retriever
 from app.domains.retrieval.retrievers.dense import DenseRetriever
 from app.domains.retrieval.services.retrieval_service import RetrievalService
@@ -181,3 +183,11 @@ def get_agent_service(session: DbSession) -> AgentService:
 
 
 AgentServiceDep = Annotated[AgentService, Depends(get_agent_service)]
+
+
+# ── Evaluation ───────────────────────────────────────────────────────────────
+def get_eval_service(session: DbSession) -> EvalService:
+    return EvalService(session, SqlAlchemyEvalRepository(session), get_llm_provider())
+
+
+EvalServiceDep = Annotated[EvalService, Depends(get_eval_service)]
