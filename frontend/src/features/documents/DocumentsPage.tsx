@@ -13,6 +13,7 @@ export function DocumentsPage() {
   const workspaceId = useWorkspaceStore((s) => s.activeId);
   const fileRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const documents = useQuery({
     queryKey: ["documents"],
@@ -25,7 +26,14 @@ export function DocumentsPage() {
 
   const upload = useMutation({
     mutationFn: (file: File) => api.uploadDocument(file, workspaceId ?? undefined),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["documents"] });
+      setNotice(
+        res.duplicate
+          ? `"${res.document.title}" is already indexed — duplicate skipped (same content).`
+          : `"${res.document.title}" uploaded — ingesting…`,
+      );
+    },
     onError: (e) => setError(e instanceof ApiError ? e.message : "Upload failed"),
   });
 
@@ -41,6 +49,7 @@ export function DocumentsPage() {
 
   function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     setError(null);
+    setNotice(null);
     const file = e.target.files?.[0];
     if (file) upload.mutate(file);
     if (fileRef.current) fileRef.current.value = "";
@@ -62,6 +71,7 @@ export function DocumentsPage() {
       </header>
 
       <ErrorText>{error}</ErrorText>
+      {notice && <p className="text-sm text-brand-400">{notice}</p>}
 
       <Card className="p-0">
         <table className="w-full text-sm">
