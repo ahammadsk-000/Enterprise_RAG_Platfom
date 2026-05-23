@@ -1,10 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { Suspense, lazy, useRef, useState } from "react";
 
 import { Badge, Button, Card, ErrorText } from "@/components/ui";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, downloadDocumentFile } from "@/lib/api";
 import { useWorkspaceStore } from "@/stores/workspace";
 import type { DocumentList } from "@/types/api";
+
+// Lazy-loaded so CodeMirror is only fetched when the editor opens.
+const DocumentEditor = lazy(() =>
+  import("@/features/documents/DocumentEditor").then((m) => ({ default: m.DocumentEditor })),
+);
 
 const PROCESSING = new Set(["uploaded", "parsing", "parsed", "chunking", "chunked", "embedding"]);
 
@@ -14,6 +19,7 @@ export function DocumentsPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const documents = useQuery({
     queryKey: ["documents"],
@@ -94,16 +100,28 @@ export function DocumentsPage() {
                   {doc.error && <span className="ml-2 text-xs text-red-400">{doc.error}</span>}
                 </td>
                 <td className="px-5 py-3 text-slate-400">{doc.page_count ?? "—"}</td>
-                <td className="px-5 py-3 text-right">
+                <td className="space-x-3 px-5 py-3 text-right text-xs">
+                  <button
+                    onClick={() => setEditingId(doc.id)}
+                    className="text-slate-300 hover:text-white"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => downloadDocumentFile(doc.id, doc.title)}
+                    className="text-slate-300 hover:text-white"
+                  >
+                    Download
+                  </button>
                   <button
                     onClick={() => reindex.mutate(doc.id)}
-                    className="mr-3 text-xs text-brand-400 hover:text-brand-500"
+                    className="text-brand-400 hover:text-brand-500"
                   >
                     Reindex
                   </button>
                   <button
                     onClick={() => remove.mutate(doc.id)}
-                    className="text-xs text-red-400 hover:text-red-300"
+                    className="text-red-400 hover:text-red-300"
                   >
                     Delete
                   </button>
@@ -120,6 +138,19 @@ export function DocumentsPage() {
           </tbody>
         </table>
       </Card>
+
+      {editingId && (
+        <Suspense fallback={null}>
+          <DocumentEditor
+            documentId={editingId}
+            onClose={() => setEditingId(null)}
+            onSaved={() => {
+              qc.invalidateQueries({ queryKey: ["documents"] });
+              setNotice("Saved — re-indexing the updated document…");
+            }}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

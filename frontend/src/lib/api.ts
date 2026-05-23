@@ -6,6 +6,7 @@ import type {
   AnalyticsOverview,
   ChatMessage,
   Conversation,
+  DocumentContent,
   DocumentList,
   DocumentRead,
   DocumentStatusResponse,
@@ -130,6 +131,9 @@ export const api = {
   documentStatus: (id: string) => request<DocumentStatusResponse>(`/documents/${id}/status`),
   reindexDocument: (id: string) => request<DocumentRead>(`/documents/${id}/reindex`, { method: "POST" }),
   deleteDocument: (id: string) => request<void>(`/documents/${id}`, { method: "DELETE" }),
+  getDocumentContent: (id: string) => request<DocumentContent>(`/documents/${id}/content`),
+  saveDocumentContent: (id: string, content: string) =>
+    request<DocumentRead>(`/documents/${id}/content`, { method: "PUT", body: { content } }),
 
   // ── search + rag ──
   search: (data: {
@@ -173,3 +177,20 @@ export const api = {
   listMessages: (conversationId: string) =>
     request<ChatMessage[]>(`/chat/conversations/${conversationId}/messages`),
 };
+
+// Download the raw stored file (auth header required, so not a plain anchor href).
+export async function downloadDocumentFile(id: string, filename: string): Promise<void> {
+  const headers: Record<string, string> = {};
+  if (tokenStore.access) headers.Authorization = `Bearer ${tokenStore.access}`;
+  const resp = await fetch(`${BASE}/documents/${id}/download`, { headers });
+  if (!resp.ok) throw new ApiError(resp.status, "Download failed");
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

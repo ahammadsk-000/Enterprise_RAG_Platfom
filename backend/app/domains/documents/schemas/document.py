@@ -56,3 +56,15 @@ class DocumentStatusResponse(BaseModel):
 class UploadResponse(BaseModel):
     document: DocumentRead
     duplicate: bool = Field(default=False, description="True if an identical file already existed")
+
+
+class DocumentContent(BaseModel):
+    document_id: uuid.UUID
+    title: str
+    mime_type: str
+    editable: bool
+    content: str | None
+
+
+class DocumentContentUpdate(BaseModel):
+    content: str = Field(max_length=5_000_000)

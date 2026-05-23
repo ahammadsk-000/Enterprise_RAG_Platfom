@@ -12,7 +12,7 @@ from collections.abc import Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError, ValidationError
 from app.domains.chunking.repositories.chunk_repository import ChunkRepository
 from app.domains.documents.enums import DocumentStatus
 from app.domains.documents.models.document import Document
@@ -25,6 +25,18 @@ from app.domains.ingestion.task_bus import TaskBus
 from app.integrations.storage.base import ObjectStorage
 from app.integrations.vectorstore.base import VectorStore
 from app.integrations.vectorstore.factory import collection_name
+
+# Text-based types that can be edited in-browser (binary docs are download-only).
+_EDITABLE_MIMES = {
+    "application/json",
+    "application/xml",
+    "application/csv",
+    "application/x-yaml",
+}
+
+
+def is_editable(mime_type: str) -> bool:
+    return mime_type.startswith("text/") or mime_type in _EDITABLE_MIMES
 
 
 class DocumentService:
@@ -112,6 +124,53 @@ class DocumentService:
         document.status = DocumentStatus.UPLOADED.value
         document.error = None
         await self._session.commit()
+        self._task_bus.enqueue_ingestion(document.id)
+        return document
+
+    async def get_content(
+        self, document_id: uuid.UUID, organization_id: uuid.UUID
+    ) -> tuple[Document, str | None, bool]:
+        """Return (document, decoded text or None, editable). Binary files are not editable."""
+        document = await self.get(document_id, organization_id)
+        editable = is_editable(document.mime_type)
+        text: str | None = None
+        if editable:
+            data = await self._storage.get_object(document.storage_key)
+            text = data.decode("utf-8", errors="replace")
+        return document, text, editable
+
+    async def read_bytes(self, document_id: uuid.UUID, organization_id: uuid.UUID) -> tuple[Document, bytes]:
+        """Return (document, raw stored bytes) for download."""
+        document = await self.get(document_id, organization_id)
+        return document, await self._storage.get_object(document.storage_key)
+
+    async def update_content(
+        self, document_id: uuid.UUID, organization_id: uuid.UUID, content: str
+    ) -> Document:
+        """Save edited text: store new bytes, drop stale vectors, and re-run ingestion."""
+        document = await self.get(document_id, organization_id)
+        if not is_editable(document.mime_type):
+            raise ValidationError("This file type is not editable.")
+
+        new_bytes = content.encode("utf-8")
+        new_hash = content_hash(new_bytes)
+        if new_hash == document.content_hash:
+            return document  # no change → no reindex
+
+        new_key = f"orgs/{organization_id}/raw/{new_hash[:2]}/{new_hash}"
+        await self._storage.put_object(new_key, new_bytes, document.mime_type)
+        old_key = document.storage_key
+
+        document.storage_key = new_key
+        document.content_hash = new_hash
+        document.byte_size = len(new_bytes)
+        document.status = DocumentStatus.UPLOADED.value
+        document.error = None
+        await self._session.commit()
+
+        # Best-effort cleanup of the previous object + stale vectors, then re-ingest.
+        await self._storage.delete_object(old_key)
+        await self._vectors.delete_by_document(collection_name(organization_id), document.id)
         self._task_bus.enqueue_ingestion(document.id)
         return document
 

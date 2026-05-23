@@ -62,6 +62,14 @@ export interface UploadResponse {
   duplicate: boolean;
 }
 
+export interface DocumentContent {
+  document_id: string;
+  title: string;
+  mime_type: string;
+  editable: boolean;
+  content: string | null;
+}
+
 export interface IngestionJobRead {
   id: string;
   stage: string;

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
 
 from app.api.deps import CurrentPrincipal, DocumentServiceDep, require_permission
 from app.core.exceptions import ValidationError
 from app.domains.documents.schemas.document import (
+    DocumentContent,
+    DocumentContentUpdate,
     DocumentList,
     DocumentRead,
     DocumentStatusResponse,
@@ -102,6 +104,60 @@ async def document_status(
         status=document.status,  # type: ignore[arg-type]
         chunk_count=chunk_count,
         jobs=[IngestionJobRead.model_validate(j) for j in jobs],
+    )
+
+
+@router.get(
+    "/{document_id}/content",
+    response_model=DocumentContent,
+    dependencies=[Depends(require_permission(Permission.DOCUMENTS_READ))],
+)
+async def get_document_content(
+    document_id: uuid.UUID, principal: CurrentPrincipal, service: DocumentServiceDep
+) -> DocumentContent:
+    """Return the editable text of a document (None for binary/non-text files)."""
+    assert principal.organization_id is not None
+    document, content, editable = await service.get_content(document_id, principal.organization_id)
+    return DocumentContent(
+        document_id=document.id,
+        title=document.title,
+        mime_type=document.mime_type,
+        editable=editable,
+        content=content,
+    )
+
+
+@router.put(
+    "/{document_id}/content",
+    response_model=DocumentRead,
+    dependencies=[Depends(require_permission(Permission.DOCUMENTS_WRITE))],
+)
+async def update_document_content(
+    document_id: uuid.UUID,
+    body: DocumentContentUpdate,
+    principal: CurrentPrincipal,
+    service: DocumentServiceDep,
+) -> DocumentRead:
+    """Save edited text; stores the new bytes and re-runs ingestion (re-chunk/embed/index)."""
+    assert principal.organization_id is not None
+    document = await service.update_content(document_id, principal.organization_id, body.content)
+    return DocumentRead.model_validate(document)
+
+
+@router.get(
+    "/{document_id}/download",
+    dependencies=[Depends(require_permission(Permission.DOCUMENTS_READ))],
+)
+async def download_document(
+    document_id: uuid.UUID, principal: CurrentPrincipal, service: DocumentServiceDep
+) -> Response:
+    """Download the raw stored file."""
+    assert principal.organization_id is not None
+    document, data = await service.read_bytes(document_id, principal.organization_id)
+    return Response(
+        content=data,
+        media_type=document.mime_type or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{document.title}"'},
     )
 
 
