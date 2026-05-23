@@ -162,6 +162,23 @@ async def download_document(
 
 
 @router.post(
+    "/{document_id}/extract-markdown",
+    response_model=UploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission(Permission.DOCUMENTS_WRITE))],
+)
+async def extract_to_markdown(
+    document_id: uuid.UUID, principal: CurrentPrincipal, service: DocumentServiceDep
+) -> UploadResponse:
+    """Create an editable .md document from a binary doc's extracted text (original kept)."""
+    assert principal.organization_id is not None
+    document, created = await service.extract_to_markdown(
+        document_id, principal.organization_id, principal.user_id
+    )
+    return UploadResponse(document=DocumentRead.model_validate(document), duplicate=not created)
+
+
+@router.post(
     "/{document_id}/reindex",
     response_model=DocumentRead,
     dependencies=[Depends(require_permission(Permission.DOCUMENTS_WRITE))],

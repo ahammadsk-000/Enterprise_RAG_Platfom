@@ -144,6 +144,47 @@ class DocumentService:
         document = await self.get(document_id, organization_id)
         return document, await self._storage.get_object(document.storage_key)
 
+    async def extract_to_markdown(
+        self, document_id: uuid.UUID, organization_id: uuid.UUID, created_by: uuid.UUID | None
+    ) -> tuple[Document, bool]:
+        """Create an editable .md document from a binary doc's extracted text.
+
+        The original is left untouched (still downloadable). Returns (document, created);
+        `created` is False when an identical extraction already exists. Useful for
+        PDF/DOCX, which can't be edited in place but whose text can be edited + re-indexed.
+        """
+        source = await self.get(document_id, organization_id)
+        if not source.text_storage_key:
+            raise ValidationError("No extracted text yet — wait for ingestion to finish, then retry.")
+
+        text_bytes = await self._storage.get_object(source.text_storage_key)
+        digest = content_hash(text_bytes)
+        existing = await self._docs.find_duplicate(organization_id, digest)
+        if existing is not None:
+            return existing, False
+
+        stem = source.title.rsplit(".", 1)[0] if "." in source.title else source.title
+        storage_key = f"orgs/{organization_id}/raw/{digest[:2]}/{digest}"
+        await self._storage.put_object(storage_key, text_bytes, "text/markdown")
+
+        document = await self._docs.add(
+            Document(
+                organization_id=organization_id,
+                workspace_id=source.workspace_id,
+                created_by=created_by,
+                title=f"{stem}.md",
+                storage_key=storage_key,
+                mime_type="text/markdown",
+                byte_size=len(text_bytes),
+                content_hash=digest,
+                status=DocumentStatus.UPLOADED.value,
+                doc_metadata={"extracted_from": str(source.id)},
+            )
+        )
+        await self._session.commit()
+        self._task_bus.enqueue_ingestion(document.id)
+        return document, True
+
     async def update_content(
         self, document_id: uuid.UUID, organization_id: uuid.UUID, content: str
     ) -> Document:

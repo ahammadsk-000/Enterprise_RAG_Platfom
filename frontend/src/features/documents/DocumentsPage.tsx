@@ -12,6 +12,10 @@ const DocumentEditor = lazy(() =>
 );
 
 const PROCESSING = new Set(["uploaded", "parsing", "parsed", "chunking", "chunked", "embedding"]);
+const EDITABLE_MIME = new Set(["application/json", "application/xml", "application/csv", "application/x-yaml"]);
+
+// Mirrors the backend rule: text-based files are editable in place.
+const isTextEditable = (mime: string) => mime.startsWith("text/") || EDITABLE_MIME.has(mime);
 
 export function DocumentsPage() {
   const qc = useQueryClient();
@@ -51,6 +55,20 @@ export function DocumentsPage() {
   const remove = useMutation({
     mutationFn: (id: string) => api.deleteDocument(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+  });
+
+  const extract = useMutation({
+    mutationFn: (id: string) => api.extractMarkdown(id),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["documents"] });
+      setNotice(
+        res.duplicate
+          ? `Already extracted — opening "${res.document.title}".`
+          : `Extracted text → "${res.document.title}" (editable, indexing). Original kept.`,
+      );
+      setEditingId(res.document.id); // open the new editable markdown doc
+    },
+    onError: (e) => setError(e instanceof ApiError ? e.message : "Extract failed"),
   });
 
   function onPick(e: React.ChangeEvent<HTMLInputElement>) {
@@ -101,12 +119,19 @@ export function DocumentsPage() {
                 </td>
                 <td className="px-5 py-3 text-slate-400">{doc.page_count ?? "—"}</td>
                 <td className="space-x-3 px-5 py-3 text-right text-xs">
-                  <button
-                    onClick={() => setEditingId(doc.id)}
-                    className="text-slate-300 hover:text-white"
-                  >
-                    Edit
-                  </button>
+                  {isTextEditable(doc.mime_type) ? (
+                    <button onClick={() => setEditingId(doc.id)} className="text-slate-300 hover:text-white">
+                      Edit
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => extract.mutate(doc.id)}
+                      className="text-slate-300 hover:text-white"
+                      title="Extract the text into an editable Markdown document"
+                    >
+                      Extract → MD
+                    </button>
+                  )}
                   <button
                     onClick={() => downloadDocumentFile(doc.id, doc.title)}
                     className="text-slate-300 hover:text-white"

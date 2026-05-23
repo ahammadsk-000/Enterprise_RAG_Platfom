@@ -134,6 +134,8 @@ export const api = {
   getDocumentContent: (id: string) => request<DocumentContent>(`/documents/${id}/content`),
   saveDocumentContent: (id: string, content: string) =>
     request<DocumentRead>(`/documents/${id}/content`, { method: "PUT", body: { content } }),
+  extractMarkdown: (id: string) =>
+    request<UploadResponse>(`/documents/${id}/extract-markdown`, { method: "POST" }),
 
   // ── search + rag ──
   search: (data: {
