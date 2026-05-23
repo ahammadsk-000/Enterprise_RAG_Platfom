@@ -36,7 +36,19 @@ SentenceTransformers · Qdrant · Neo4j
 **DevOps/Obs** Docker · Compose · Kubernetes · Helm · GitHub Actions · Nginx ·
 Prometheus · Grafana · Loki · OpenTelemetry · Langfuse
 
-## Quick start (local)
+## Quick start
+
+**Demo mode (lightest — recommended for laptops).** Native Python + a single Postgres
+container; fake LLM/embeddings, in-memory vector/graph, inline ingestion (no Redis/
+Qdrant/Neo4j/Ollama/worker). Double-click **`enterprise_rag_demo.bat`** (Windows), then
+open http://localhost:5173. Upload a `.txt`/`.md` file → search → chat. Retrieval,
+chunking, citations, graph and agents are all real; only the LLM/embeddings are stubbed.
+
+**Full stack.** Double-click **`enterprise_rag.bat`** (Docker Compose: api, worker,
+postgres, redis, qdrant, minio, ollama, neo4j, observability). Needs ~10 GB RAM and a
+one-time `ollama pull` of the chat/embedding models.
+
+### Manual (local)
 
 ```bash
 # 1. bring up the full stack (db, redis, qdrant, neo4j, minio, ollama, api, worker, obs)

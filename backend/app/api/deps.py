@@ -13,6 +13,7 @@ from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.exceptions import AuthError
 from app.db.session import get_db
 from app.domains.identity.permissions import Permission
@@ -101,7 +102,11 @@ def require_permission(
 
 # ── Documents / ingestion ────────────────────────────────────────────────────
 def get_task_bus() -> TaskBus:
-    """Default task bus (Celery). Overridden in tests with a NullTaskBus."""
+    """Celery in production; inline (in-process) when INGESTION_INLINE is set (demo/dev)."""
+    if get_settings().ingestion_inline:
+        from app.domains.ingestion.task_bus import InlineTaskBus
+
+        return InlineTaskBus()
     return CeleryTaskBus()
 
 

@@ -16,7 +16,7 @@ from httpx import ASGITransport, AsyncClient
 from app.api.deps import get_task_bus
 from app.domains.ingestion.task_bus import NullTaskBus
 from app.main import create_app
-from app.workers.tasks.ingestion import _run as run_ingestion
+from app.workers.tasks.ingestion import run_ingestion_pipeline as run_ingestion
 
 pytestmark = pytest.mark.integration
 

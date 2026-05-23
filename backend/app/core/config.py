@@ -154,6 +154,8 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
     # Per-client requests/minute (0 disables rate limiting).
     rate_limit_per_minute: int = 240
+    # Demo/dev: run the ingestion pipeline inline (no Celery worker/broker needed).
+    ingestion_inline: bool = False
 
     db: DatabaseSettings = Field(default_factory=DatabaseSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)

@@ -1,8 +1,9 @@
-"""Celery ingestion task.
+"""Celery ingestion task + the reusable async pipeline coroutine.
 
-Thin wrapper: it builds an async session + the ingestion service and runs the
-pipeline for one document. Retries with backoff on transient failures; the service
-itself records per-stage job status and marks the document FAILED on hard errors.
+`run_ingestion_pipeline` builds an async session + the ingestion service and runs the
+full pipeline for one document; it is shared by the Celery task (production) and the
+InlineTaskBus (demo/dev, no broker). The service records per-stage job status and
+marks the document FAILED on hard errors.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from app.workers.celery_app import celery_app
 logger = get_logger(__name__)
 
 
-async def _run(document_id: uuid.UUID) -> None:
+async def run_ingestion_pipeline(document_id: uuid.UUID) -> None:
     from app.db.session import AsyncSessionLocal
     from app.domains.chunking.repositories.chunk_repository import SqlAlchemyChunkRepository
     from app.domains.chunking.services.chunking_service import ChunkingService
@@ -72,7 +73,7 @@ async def _run(document_id: uuid.UUID) -> None:
 def ingest_document(self, document_id: str) -> None:  # type: ignore[no-untyped-def]
     logger.info("ingestion.task.start", document_id=document_id)
     try:
-        asyncio.run(_run(uuid.UUID(document_id)))
+        asyncio.run(run_ingestion_pipeline(uuid.UUID(document_id)))
     except Exception as exc:  # noqa: BLE001 - retry transient infra errors
         logger.warning("ingestion.task.retry", document_id=document_id, error=str(exc))
         raise self.retry(exc=exc) from exc
