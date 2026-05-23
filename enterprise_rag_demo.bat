@@ -98,7 +98,7 @@ popd
 :: --- Backend (native uvicorn, demo env) ----------------------------------
 echo [INFO] Starting Backend on %BACKEND_URL% ...
 start "RAG Backend (demo)" /d "%BACKEND_DIR%" cmd /k ^
-  "set ENVIRONMENT=test&& set INGESTION_INLINE=true&& set DEBUG=true&& set POSTGRES_HOST=localhost&& set POSTGRES_USER=rag&& set POSTGRES_PASSWORD=rag&& set POSTGRES_DB=enterprise_rag&& set AUTH_SECRET_KEY=demo-only-secret-key-change-me-please-0123456789&& "%PY%" -m uvicorn app.main:app --host 0.0.0.0 --port %BACKEND_PORT% --reload"
+  "set ENVIRONMENT=test&& set INGESTION_INLINE=true&& set DEBUG=true&& set POSTGRES_HOST=localhost&& set POSTGRES_USER=rag&& set POSTGRES_PASSWORD=rag&& set POSTGRES_DB=enterprise_rag&& set AUTH_SECRET_KEY=demo-only-secret-key-change-me-please-0123456789&& "%PY%" -m uvicorn app.main:app --host 0.0.0.0 --port %BACKEND_PORT%"
 
 echo [INFO] Waiting for backend to be ready...
 set /a TRIES=0
@@ -140,7 +140,7 @@ echo Answers come from a deterministic FAKE LLM (no GPU/model needed); retrieval
 echo  (hybrid dense+BM25), chunking, citations, graph and agents are all real.
 echo.
 echo Note: vector/graph/file stores are in-memory, so a backend restart needs a
-echo  re-upload (or use the Reindex button). Postgres data persists.
+echo  delete the docs and re-upload (Reindex cannot recover after a full restart). Postgres data persists.
 echo.
 echo Keep both windows open. Stop Postgres later with:  docker compose down
 echo Press any key to close this launcher window.
