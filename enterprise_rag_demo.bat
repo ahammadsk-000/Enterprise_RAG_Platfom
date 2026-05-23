@@ -85,7 +85,10 @@ if not exist "%PY%" (
     "%PY%" -m pip install --quiet -r "%BACKEND_DIR%\requirements-demo.txt"
     if errorlevel 1 (echo [ERROR] pip install failed. & pause & exit /b 1)
 ) else (
-    echo [INFO] Reusing existing venv at backend\.venv ^(delete it to reinstall^).
+    echo [INFO] Reusing existing venv; ensuring deps are up to date...
+)
+"%PY%" -m pip install --quiet -r "%BACKEND_DIR%\requirements-demo.txt"
+if errorlevel 1 (echo [WARN] dependency install reported an error; continuing...
 )
 
 :: --- Database migrations --------------------------------------------------

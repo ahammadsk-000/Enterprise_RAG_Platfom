@@ -1,9 +1,10 @@
 # Lightweight runtime deps for DEMO MODE (native Python, fake LLM/embeddings,
-# in-memory vector/graph/storage, inline ingestion). Excludes the heavy AI/ML and
-# document libs (torch, transformers, pymupdf, langchain, qdrant, neo4j, boto3) —
-# parsers/providers import those lazily and aren't exercised in demo mode.
+# in-memory vector/graph/storage, inline ingestion). Excludes the heavy AI/ML libs
+# (torch, transformers, langchain, qdrant, neo4j, boto3) — those import lazily and
+# aren't exercised in demo mode.
 #
-# Demo supports text/markdown/HTML uploads; PDF/DOCX/image need the full install.
+# Supports text/markdown/HTML + PDF + DOCX uploads. Scanned/image-only PDFs need the
+# OCR stack (tesseract) from the full install; text-based PDFs work here.
 
 fastapi>=0.115
 uvicorn[standard]>=0.32
@@ -22,3 +23,7 @@ python-multipart>=0.0.12
 email-validator>=2.2
 celery>=5.4
 prometheus-client>=0.21
+
+# Document parsing (text-based PDFs + DOCX). Lightweight, no system dependencies.
+pymupdf>=1.24
+python-docx>=1.1
