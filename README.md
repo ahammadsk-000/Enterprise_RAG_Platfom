@@ -6,9 +6,11 @@ reasoning, citation-grounded streaming answers, evaluation, and full observabili
 Built FastAPI-first with clean architecture, async-everywhere, and Kubernetes-ready
 deployment.
 
-> Status: **Phase 4 — hybrid retrieval + RAG + citations** complete (auth/RBAC/SSO,
-> ingestion, chunk→embed→index, and hybrid search + citation-grounded answers). See
-> the roadmap below and the design docs in [`docs/architecture/`](docs/architecture/).
+> Status: **All 10 phases implemented** — auth/RBAC/SSO, ingestion+OCR, chunk→embed→index,
+> hybrid retrieval + RAG + citations, streaming chat + workspaces + memory, Graph RAG,
+> multi-agent retrieval, evaluation, observability, and Kubernetes/Helm + CI. A React UI
+> (login, documents, search, chat) lives in [`frontend/`](frontend/). See the design docs
+> in [`docs/architecture/`](docs/architecture/).
 
 ## Architecture
 

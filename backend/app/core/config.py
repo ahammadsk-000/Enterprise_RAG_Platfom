@@ -152,6 +152,8 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     # Comma-separated origins, e.g. "http://localhost:5173,https://app.example.com"
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    # Per-client requests/minute (0 disables rate limiting).
+    rate_limit_per_minute: int = 240
 
     db: DatabaseSettings = Field(default_factory=DatabaseSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)

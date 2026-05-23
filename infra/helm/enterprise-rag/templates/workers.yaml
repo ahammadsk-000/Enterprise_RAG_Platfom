@@ -1,0 +1,56 @@
+{{- range .Values.workers }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "enterprise-rag.fullname" $ }}-worker-{{ .name }}
+  labels: {{- include "enterprise-rag.labels" $ | nindent 4 }}
+spec:
+  replicas: {{ .replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+      app.kubernetes.io/component: worker-{{ .name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+        app.kubernetes.io/component: worker-{{ .name }}
+    spec:
+      serviceAccountName: {{ include "enterprise-rag.serviceAccountName" $ }}
+      securityContext: {{- toYaml $.Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: worker
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          command: ["celery", "-A", "app.workers.celery_app.celery_app", "worker",
+                    "-Q", "{{ .queues }}", "--loglevel=INFO"]
+          envFrom: {{- include "enterprise-rag.envFrom" $ | nindent 12 }}
+          resources: {{- toYaml .resources | nindent 12 }}
+---
+{{- end }}
+{{- if .Values.beat.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "enterprise-rag.fullname" . }}-beat
+  labels: {{- include "enterprise-rag.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: beat
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: beat
+    spec:
+      serviceAccountName: {{ include "enterprise-rag.serviceAccountName" . }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: beat
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: ["celery", "-A", "app.workers.celery_app.celery_app", "beat", "--loglevel=INFO"]
+          envFrom: {{- include "enterprise-rag.envFrom" . | nindent 12 }}
+{{- end }}

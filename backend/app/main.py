@@ -20,6 +20,7 @@ from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
 from app.core.metrics import render_metrics
 from app.core.middleware import RequestContextMiddleware
+from app.core.ratelimit import InMemoryRateLimiter, RateLimitMiddleware, SecurityHeadersMiddleware
 from app.core.telemetry import setup_telemetry
 from app.db.session import dispose_engine
 
@@ -51,6 +52,10 @@ def create_app() -> FastAPI:
     )
 
     app.add_middleware(RequestContextMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(
+        RateLimitMiddleware, limiter=InMemoryRateLimiter(limit=settings.rate_limit_per_minute)
+    )
     # Required by Authlib to carry OAuth state/nonce across the SSO redirect.
     app.add_middleware(SessionMiddleware, secret_key=settings.auth.secret_key, https_only=settings.is_production)
     app.add_middleware(

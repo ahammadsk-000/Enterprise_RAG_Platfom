@@ -1,0 +1,72 @@
+# Default values for the Enterprise RAG chart.
+
+image:
+  repository: ghcr.io/enterprise-rag/backend
+  tag: latest
+  pullPolicy: IfNotPresent
+
+api:
+  replicaCount: 2
+  port: 8000
+  resources:
+    requests: { cpu: "250m", memory: "512Mi" }
+    limits: { cpu: "1", memory: "1Gi" }
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+# One worker deployment per ingestion queue; scale independently.
+workers:
+  - name: ingest
+    queues: "default,ocr,parse,chunk,embed,index,graph,eval"
+    replicaCount: 2
+    resources:
+      requests: { cpu: "500m", memory: "1Gi" }
+      limits: { cpu: "2", memory: "2Gi" }
+
+beat:
+  enabled: true
+
+migrations:
+  enabled: true   # runs `alembic upgrade head` as a pre-upgrade Job
+
+ingress:
+  enabled: true
+  className: nginx
+  host: rag.example.com
+  tls:
+    enabled: true
+    secretName: enterprise-rag-tls
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+
+# Non-secret config (rendered into a ConfigMap).
+config:
+  ENVIRONMENT: production
+  DEBUG: "false"
+  API_V1_PREFIX: /api/v1
+  POSTGRES_HOST: postgres
+  REDIS_HOST: redis
+  QDRANT_HOST: qdrant
+  NEO4J_URI: bolt://neo4j:7687
+  STORAGE_ENDPOINT_URL: http://minio:9000
+  LLM_BASE_URL: http://ollama:11434
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+
+# Secret keys (provide via --set or an external secret manager; never commit values).
+secrets:
+  AUTH_SECRET_KEY: ""
+  POSTGRES_PASSWORD: ""
+  NEO4J_PASSWORD: ""
+  STORAGE_SECRET_KEY: ""
+
+serviceAccount:
+  create: true
+  name: ""
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000

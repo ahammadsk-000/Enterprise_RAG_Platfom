@@ -1,0 +1,8 @@
+apiVersion: v2
+name: enterprise-rag
+description: Enterprise RAG Platform — API, workers, and supporting services
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+maintainers:
+  - name: Enterprise RAG Team
