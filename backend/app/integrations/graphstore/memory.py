@@ -27,17 +27,22 @@ class InMemoryGraphStore:
         wanted = {n.lower() for n in names}
         frontier = set(wanted)
         seen: set[str] = set(wanted)
+        emitted: set[str] = set()  # entity keys already returned (dedupe duplicate edges)
         out: list[GraphNeighbor] = []
         for _ in range(hops):
             next_frontier: set[str] = set()
             for rel in self._relations[tenant]:
                 s, t = rel.source.lower(), rel.target.lower()
                 if s in frontier and t not in seen:
-                    out.append(GraphNeighbor(rel.target, self._entities[tenant].get(t, "Entity"), rel.type, "out"))
-                    next_frontier.add(t)
+                    key, name, direction = t, rel.target, "out"
                 elif t in frontier and s not in seen:
-                    out.append(GraphNeighbor(rel.source, self._entities[tenant].get(s, "Entity"), rel.type, "in"))
-                    next_frontier.add(s)
+                    key, name, direction = s, rel.source, "in"
+                else:
+                    continue
+                next_frontier.add(key)
+                if key not in emitted:
+                    emitted.add(key)
+                    out.append(GraphNeighbor(name, self._entities[tenant].get(key, "Entity"), rel.type, direction))
             seen |= next_frontier
             frontier = next_frontier
             if not frontier:
