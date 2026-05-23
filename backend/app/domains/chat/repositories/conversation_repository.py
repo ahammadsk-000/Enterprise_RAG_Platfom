@@ -18,6 +18,7 @@ class ConversationRepository(Protocol):
     async def get(self, conversation_id: uuid.UUID) -> Conversation | None: ...
     async def list_for_user(self, organization_id: uuid.UUID, user_id: uuid.UUID) -> Sequence[Conversation]: ...
     async def touch(self, conversation: Conversation) -> None: ...
+    async def delete(self, conversation: Conversation) -> None: ...
 
 
 class MessageRepository(Protocol):
@@ -48,6 +49,10 @@ class SqlAlchemyConversationRepository:
 
     async def touch(self, conversation: Conversation) -> None:
         conversation.last_message_at = datetime.now(UTC)
+        await self._session.flush()
+
+    async def delete(self, conversation: Conversation) -> None:
+        await self._session.delete(conversation)
         await self._session.flush()
 
 

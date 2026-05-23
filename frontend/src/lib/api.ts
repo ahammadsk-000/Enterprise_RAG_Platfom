@@ -182,6 +182,10 @@ export const api = {
     request<Conversation>("/chat/conversations", { method: "POST", body: data }),
   listMessages: (conversationId: string) =>
     request<ChatMessage[]>(`/chat/conversations/${conversationId}/messages`),
+  renameConversation: (id: string, title: string) =>
+    request<Conversation>(`/chat/conversations/${id}`, { method: "PATCH", body: { title } }),
+  deleteConversation: (id: string) =>
+    request<void>(`/chat/conversations/${id}`, { method: "DELETE" }),
 };
 
 // Download the raw stored file (auth header required, so not a plain anchor href).

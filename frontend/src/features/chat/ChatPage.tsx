@@ -30,6 +30,8 @@ export function ChatPage() {
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = useState("");
   const socketRef = useRef<WebSocket | null>(null);
   const socketConvRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -57,6 +59,29 @@ export function ChatPage() {
     if (streaming) return;
     setSelectedId(null);
     setMessages([]);
+  }
+
+  function startRename(id: string, current: string) {
+    setRenamingId(id);
+    setDraftTitle(current);
+  }
+
+  async function saveRename(id: string) {
+    const title = draftTitle.trim();
+    setRenamingId(null);
+    if (!title) return;
+    await api.renameConversation(id, title);
+    qc.invalidateQueries({ queryKey: ["conversations"] });
+  }
+
+  async function deleteConversation(id: string) {
+    if (streaming) return;
+    await api.deleteConversation(id);
+    qc.invalidateQueries({ queryKey: ["conversations"] });
+    if (selectedId === id) {
+      setSelectedId(null);
+      setMessages([]);
+    }
   }
 
   // Close the socket on unmount.
@@ -140,17 +165,52 @@ export function ChatPage() {
           + New chat
         </Button>
         <div className="flex-1 space-y-1 overflow-y-auto">
-          {conversations.data?.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => void selectConversation(c.id)}
-              className={`w-full truncate rounded-md px-3 py-2 text-left text-sm transition ${
-                selectedId === c.id ? "bg-slate-800 text-white" : "text-slate-400 hover:bg-slate-800/60"
-              }`}
-            >
-              {c.title}
-            </button>
-          ))}
+          {conversations.data?.map((c) =>
+            renamingId === c.id ? (
+              <input
+                key={c.id}
+                autoFocus
+                value={draftTitle}
+                onChange={(e) => setDraftTitle(e.target.value)}
+                onBlur={() => void saveRename(c.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void saveRename(c.id);
+                  if (e.key === "Escape") setRenamingId(null);
+                }}
+                className="w-full rounded-md border border-brand-500 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none"
+              />
+            ) : (
+              <div
+                key={c.id}
+                className={`group flex items-center rounded-md text-sm transition ${
+                  selectedId === c.id ? "bg-slate-800 text-white" : "text-slate-400 hover:bg-slate-800/60"
+                }`}
+              >
+                <button
+                  onClick={() => void selectConversation(c.id)}
+                  className="flex-1 truncate px-3 py-2 text-left"
+                >
+                  {c.title}
+                </button>
+                <div className="flex shrink-0 items-center gap-1 pr-2 opacity-0 group-hover:opacity-100">
+                  <button
+                    title="Rename"
+                    onClick={() => startRename(c.id, c.title)}
+                    className="rounded p-1 text-slate-400 hover:text-white"
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    title="Delete"
+                    onClick={() => void deleteConversation(c.id)}
+                    className="rounded p-1 text-slate-400 hover:text-red-400"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </div>
+            ),
+          )}
         </div>
       </div>
 

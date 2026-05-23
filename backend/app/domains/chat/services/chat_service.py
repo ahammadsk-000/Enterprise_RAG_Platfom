@@ -84,6 +84,29 @@ class ChatService:
         await self.get_conversation(conversation_id, organization_id)
         return await self._messages.list_for_conversation(conversation_id)
 
+    async def rename_conversation(
+        self, conversation_id: uuid.UUID, organization_id: uuid.UUID, user_id: uuid.UUID, title: str
+    ) -> Conversation:
+        conversation = await self._owned_conversation(conversation_id, organization_id, user_id)
+        conversation.title = title.strip()[:_TITLE_MAX] or _DEFAULT_TITLE
+        await self._session.commit()
+        return conversation
+
+    async def delete_conversation(
+        self, conversation_id: uuid.UUID, organization_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        conversation = await self._owned_conversation(conversation_id, organization_id, user_id)
+        await self._conversations.delete(conversation)
+        await self._session.commit()
+
+    async def _owned_conversation(
+        self, conversation_id: uuid.UUID, organization_id: uuid.UUID, user_id: uuid.UUID
+    ) -> Conversation:
+        conversation = await self.get_conversation(conversation_id, organization_id)
+        if conversation.user_id != user_id:
+            raise NotFoundError("Conversation not found.")
+        return conversation
+
     # ── answering ─────────────────────────────────────────────────────────────
     async def answer(
         self, *, conversation: Conversation, user_id: uuid.UUID, req: ChatRequest

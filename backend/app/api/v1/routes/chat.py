@@ -6,6 +6,9 @@ import uuid
 
 from fastapi import APIRouter, Depends
 
+from fastapi import status
+from pydantic import BaseModel, Field
+
 from app.api.deps import ChatServiceDep, CurrentPrincipal, require_permission
 from app.domains.chat.schemas import (
     ChatRequest,
@@ -17,6 +20,10 @@ from app.domains.chat.schemas import (
 from app.domains.identity.permissions import Permission
 
 router = APIRouter()
+
+
+class ConversationRename(BaseModel):
+    title: str = Field(min_length=1, max_length=512)
 
 
 @router.post(
@@ -69,3 +76,30 @@ async def send_message(
     assert principal.organization_id is not None
     conversation = await service.get_conversation(conversation_id, principal.organization_id)
     return await service.answer(conversation=conversation, user_id=principal.user_id, req=req)
+
+
+@router.patch(
+    "/conversations/{conversation_id}",
+    response_model=ConversationRead,
+    dependencies=[Depends(require_permission(Permission.CHAT_WRITE))],
+)
+async def rename_conversation(
+    conversation_id: uuid.UUID, body: ConversationRename, principal: CurrentPrincipal, service: ChatServiceDep
+) -> ConversationRead:
+    assert principal.organization_id is not None
+    convo = await service.rename_conversation(
+        conversation_id, principal.organization_id, principal.user_id, body.title
+    )
+    return ConversationRead.model_validate(convo)
+
+
+@router.delete(
+    "/conversations/{conversation_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission(Permission.CHAT_WRITE))],
+)
+async def delete_conversation(
+    conversation_id: uuid.UUID, principal: CurrentPrincipal, service: ChatServiceDep
+) -> None:
+    assert principal.organization_id is not None
+    await service.delete_conversation(conversation_id, principal.organization_id, principal.user_id)
