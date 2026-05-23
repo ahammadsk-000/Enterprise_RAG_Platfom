@@ -10,6 +10,7 @@ from fastapi import APIRouter
 
 from app.api.ws import chat as ws_chat
 from app.api.v1.routes import (
+    admin,
     agents,
     auth,
     chat,
@@ -36,5 +37,6 @@ api_router.include_router(rag.router, prefix="/rag", tags=["rag"])
 api_router.include_router(graph.router, prefix="/graph", tags=["graph-rag"])
 api_router.include_router(agents.router, prefix="/agents", tags=["agents"])
 api_router.include_router(evaluation.router, prefix="/evaluation", tags=["evaluation"])
+api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
 api_router.include_router(ws_chat.router, prefix="/ws", tags=["chat", "ws"])

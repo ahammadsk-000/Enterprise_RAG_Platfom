@@ -25,6 +25,7 @@ dependencies = [
     "authlib>=1.3",
     # observability
     "structlog>=24.4",
+    "prometheus-client>=0.21",
     "opentelemetry-sdk>=1.28",
     "opentelemetry-instrumentation-fastapi>=0.49b0",
     "opentelemetry-exporter-otlp>=1.28",

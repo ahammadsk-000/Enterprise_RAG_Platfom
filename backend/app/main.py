@@ -10,7 +10,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -18,7 +18,9 @@ from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
+from app.core.metrics import render_metrics
 from app.core.middleware import RequestContextMiddleware
+from app.core.telemetry import setup_telemetry
 from app.db.session import dispose_engine
 
 logger = get_logger(__name__)
@@ -63,6 +65,12 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
     app.include_router(api_router, prefix=settings.api_v1_prefix)
 
+    @app.get("/metrics", include_in_schema=False)
+    async def metrics() -> Response:
+        body, content_type = render_metrics()
+        return Response(content=body, media_type=content_type)
+
+    setup_telemetry(app)
     return app
 
 

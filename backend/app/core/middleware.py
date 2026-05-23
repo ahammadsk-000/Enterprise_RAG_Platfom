@@ -16,6 +16,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from app.core.logging import get_logger
+from app.core.metrics import record_request
 
 logger = get_logger(__name__)
 
@@ -35,11 +36,15 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         )
 
         start = time.perf_counter()
+        status_code = 500
         try:
             response = await call_next(request)
+            status_code = response.status_code
         finally:
-            elapsed_ms = round((time.perf_counter() - start) * 1000, 2)
-            logger.info("request.completed", duration_ms=elapsed_ms)
+            elapsed = time.perf_counter() - start
+            endpoint = getattr(request.scope.get("route"), "path", request.url.path)
+            logger.info("request.completed", duration_ms=round(elapsed * 1000, 2), status=status_code)
+            record_request(request.method, endpoint, status_code, elapsed)
 
         response.headers[REQUEST_ID_HEADER] = request_id
         return response

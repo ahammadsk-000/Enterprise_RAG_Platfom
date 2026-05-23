@@ -46,6 +46,7 @@ from app.domains.agents.repositories.agent_repository import SqlAlchemyAgentRunR
 from app.domains.agents.services.agent_service import AgentService
 from app.domains.evaluation.repositories.eval_repository import SqlAlchemyEvalRepository
 from app.domains.evaluation.services.eval_service import EvalService
+from app.domains.observability.services.analytics_service import AnalyticsService
 from app.domains.retrieval.retrievers.bm25 import BM25Retriever
 from app.domains.retrieval.retrievers.dense import DenseRetriever
 from app.domains.retrieval.services.retrieval_service import RetrievalService
@@ -191,3 +192,11 @@ def get_eval_service(session: DbSession) -> EvalService:
 
 
 EvalServiceDep = Annotated[EvalService, Depends(get_eval_service)]
+
+
+# ── Analytics ────────────────────────────────────────────────────────────────
+def get_analytics_service(session: DbSession) -> AnalyticsService:
+    return AnalyticsService(session)
+
+
+AnalyticsServiceDep = Annotated[AnalyticsService, Depends(get_analytics_service)]
