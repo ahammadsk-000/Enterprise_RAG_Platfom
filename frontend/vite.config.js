@@ -15,7 +15,8 @@ export default defineConfig(function (_a) {
         server: {
             port: 5173,
             proxy: {
-                "/api": { target: target, changeOrigin: true },
+                // ws: true so the streaming chat WebSocket upgrade is proxied to the backend.
+                "/api": { target: target, changeOrigin: true, ws: true },
             },
         },
         build: { outDir: "dist", sourcemap: mode !== "production" },

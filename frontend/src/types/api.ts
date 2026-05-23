@@ -125,3 +125,113 @@ export interface ProblemDetail {
   status?: number;
   trace_id?: string;
 }
+
+// ── workspaces ──
+export interface Workspace {
+  id: string;
+  organization_id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  chunking_strategy: string;
+  created_at: string;
+}
+
+// ── graph rag ──
+export interface GraphNeighbor {
+  name: string;
+  type: string;
+  relation: string;
+  direction: string;
+}
+
+export interface GraphExploreResponse {
+  seeds: string[];
+  neighbors: GraphNeighbor[];
+}
+
+// ── agents ──
+export interface AgentStep {
+  node: string;
+  role: string;
+  output: Record<string, unknown>;
+  latency_ms: number;
+}
+
+export interface AgentResearchResponse {
+  run_id: string | null;
+  answer: string;
+  citations: Citation[];
+  confidence: number;
+  verified: boolean;
+  sub_questions: string[];
+  steps: AgentStep[];
+  total_tokens: number;
+}
+
+// ── evaluation ──
+export interface EvalDataset {
+  id: string;
+  name: string;
+  kind: string;
+  created_at: string;
+}
+
+export interface EvalSampleIn {
+  question: string;
+  ground_truth?: string | null;
+  contexts: string[];
+}
+
+export interface SampleResult {
+  sample_id: string;
+  question: string;
+  answer: string;
+  scores: Record<string, number>;
+}
+
+export interface EvalRunResult {
+  run_id: string | null;
+  dataset_id: string;
+  metrics: Record<string, number>;
+  sample_count: number;
+  results: SampleResult[];
+}
+
+// ── admin analytics ──
+export interface AnalyticsOverview {
+  documents_total: number;
+  documents_indexed: number;
+  conversations: number;
+  messages: number;
+  total_tokens: number;
+  avg_confidence: number | null;
+  retrieval_queries: number;
+  avg_retrieval_latency_ms: number | null;
+  agent_runs: number;
+}
+
+// ── chat ──
+export interface Conversation {
+  id: string;
+  title: string;
+  workspace_id: string | null;
+  last_message_at: string | null;
+  created_at: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: string;
+  content: string;
+  model: string | null;
+  confidence: number | null;
+  citations: Citation[];
+  created_at: string;
+}
+
+// WebSocket streaming events
+export type ChatStreamEvent =
+  | { type: "token"; content: string }
+  | { type: "done"; message_id: string; citations: Citation[]; confidence: number; model: string; latency_ms: number }
+  | { type: "error"; detail: string };

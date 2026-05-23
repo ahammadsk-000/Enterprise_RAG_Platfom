@@ -1,13 +1,46 @@
+import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 
+import { api } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth";
+import { useWorkspaceStore } from "@/stores/workspace";
 
 const NAV = [
   { to: "/chat", label: "Chat", icon: "💬" },
   { to: "/search", label: "Search", icon: "🔍" },
   { to: "/documents", label: "Documents", icon: "📄" },
+  { to: "/graph", label: "Graph", icon: "🕸️" },
+  { to: "/agents", label: "Agents", icon: "🤖" },
+  { to: "/evaluation", label: "Evaluation", icon: "📊" },
+  { to: "/workspaces", label: "Workspaces", icon: "🗂️" },
+  { to: "/admin", label: "Admin", icon: "📈" },
 ];
+
+function WorkspaceSwitcher() {
+  const { activeId, setActive } = useWorkspaceStore();
+  const workspaces = useQuery({ queryKey: ["workspaces"], queryFn: () => api.listWorkspaces() });
+
+  return (
+    <div className="mb-4 px-2">
+      <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-slate-500">
+        Workspace
+      </label>
+      <select
+        value={activeId ?? ""}
+        onChange={(e) => setActive(e.target.value || null)}
+        className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-brand-500"
+      >
+        <option value="">All documents</option>
+        {workspaces.data?.map((w) => (
+          <option key={w.id} value={w.id}>
+            {w.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
 
 export function Layout({ children }: { children: ReactNode }) {
   const me = useAuthStore((s) => s.me);
@@ -20,7 +53,10 @@ export function Layout({ children }: { children: ReactNode }) {
           <div className="text-lg font-semibold text-white">Enterprise RAG</div>
           <div className="text-xs text-slate-500">Knowledge Platform</div>
         </div>
-        <nav className="flex flex-1 flex-col gap-1">
+
+        <WorkspaceSwitcher />
+
+        <nav className="flex flex-1 flex-col gap-1 overflow-y-auto">
           {NAV.map((item) => (
             <NavLink
               key={item.to}
@@ -36,6 +72,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </NavLink>
           ))}
         </nav>
+
         <div className="mt-auto border-t border-slate-800 pt-4">
           <div className="px-2 text-sm text-slate-200">{me?.user.email}</div>
           <div className="px-2 text-xs capitalize text-slate-500">{me?.role ?? "member"}</div>

@@ -3,16 +3,19 @@ import { useState } from "react";
 
 import { Badge, Button, Card, ErrorText, Input, Label, Select } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
+import { useWorkspaceStore } from "@/stores/workspace";
 import type { RetrievalStrategy, SearchResponse } from "@/types/api";
 
 export function SearchPage() {
+  const workspaceId = useWorkspaceStore((s) => s.activeId);
   const [query, setQuery] = useState("");
   const [strategy, setStrategy] = useState<RetrievalStrategy>("hybrid");
   const [topK, setTopK] = useState(10);
   const [rerank, setRerank] = useState(true);
 
   const search = useMutation({
-    mutationFn: () => api.search({ query, top_k: topK, strategy, rerank }),
+    mutationFn: () =>
+      api.search({ query, top_k: topK, strategy, rerank, workspace_id: workspaceId ?? undefined }),
   });
 
   function submit(e: React.FormEvent) {

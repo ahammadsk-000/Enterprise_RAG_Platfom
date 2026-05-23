@@ -3,12 +3,14 @@ import { useRef, useState } from "react";
 
 import { Badge, Button, Card, ErrorText } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
+import { useWorkspaceStore } from "@/stores/workspace";
 import type { DocumentList } from "@/types/api";
 
 const PROCESSING = new Set(["uploaded", "parsing", "parsed", "chunking", "chunked", "embedding"]);
 
 export function DocumentsPage() {
   const qc = useQueryClient();
+  const workspaceId = useWorkspaceStore((s) => s.activeId);
   const fileRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,7 +24,7 @@ export function DocumentsPage() {
   });
 
   const upload = useMutation({
-    mutationFn: (file: File) => api.uploadDocument(file),
+    mutationFn: (file: File) => api.uploadDocument(file, workspaceId ?? undefined),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
     onError: (e) => setError(e instanceof ApiError ? e.message : "Upload failed"),
   });

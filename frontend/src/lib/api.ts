@@ -2,15 +2,24 @@
 // Tokens are persisted in localStorage; the dev server proxies /api to the backend.
 
 import type {
+  AgentResearchResponse,
+  AnalyticsOverview,
+  ChatMessage,
+  Conversation,
   DocumentList,
   DocumentRead,
   DocumentStatusResponse,
+  EvalDataset,
+  EvalRunResult,
+  EvalSampleIn,
+  GraphExploreResponse,
   MeResponse,
   RagAnswer,
   RetrievalStrategy,
   SearchResponse,
   TokenResponse,
   UploadResponse,
+  Workspace,
 } from "@/types/api";
 
 const BASE = "/api/v1";
@@ -112,18 +121,55 @@ export const api = {
   // ── documents ──
   listDocuments: (limit = 50, offset = 0) =>
     request<DocumentList>(`/documents?limit=${limit}&offset=${offset}`),
-  uploadDocument: (file: File) => {
+  uploadDocument: (file: File, workspaceId?: string) => {
     const fd = new FormData();
     fd.append("file", file);
-    return request<UploadResponse>("/documents", { method: "POST", formData: fd });
+    const qs = workspaceId ? `?workspace_id=${workspaceId}` : "";
+    return request<UploadResponse>(`/documents${qs}`, { method: "POST", formData: fd });
   },
   documentStatus: (id: string) => request<DocumentStatusResponse>(`/documents/${id}/status`),
   reindexDocument: (id: string) => request<DocumentRead>(`/documents/${id}/reindex`, { method: "POST" }),
   deleteDocument: (id: string) => request<void>(`/documents/${id}`, { method: "DELETE" }),
 
   // ── search + rag ──
-  search: (data: { query: string; top_k: number; strategy: RetrievalStrategy; rerank: boolean }) =>
-    request<SearchResponse>("/search", { method: "POST", body: data }),
+  search: (data: {
+    query: string;
+    top_k: number;
+    strategy: RetrievalStrategy;
+    rerank: boolean;
+    workspace_id?: string;
+  }) => request<SearchResponse>("/search", { method: "POST", body: data }),
   ragQuery: (data: { query: string; top_k: number; strategy: RetrievalStrategy; rerank: boolean }) =>
     request<RagAnswer>("/rag/query", { method: "POST", body: data }),
+
+  // ── workspaces ──
+  listWorkspaces: () => request<Workspace[]>("/workspaces"),
+  createWorkspace: (data: { name: string; description?: string; chunking_strategy?: string }) =>
+    request<Workspace>("/workspaces", { method: "POST", body: data }),
+  deleteWorkspace: (id: string) => request<void>(`/workspaces/${id}`, { method: "DELETE" }),
+
+  // ── graph rag ──
+  graphExplore: (data: { query: string; hops: number; limit?: number }) =>
+    request<GraphExploreResponse>("/graph/explore", { method: "POST", body: data }),
+
+  // ── agents ──
+  agentResearch: (data: { query: string; top_k: number; workspace_id?: string }) =>
+    request<AgentResearchResponse>("/agents/research", { method: "POST", body: data }),
+
+  // ── evaluation ──
+  listDatasets: () => request<EvalDataset[]>("/evaluation/datasets"),
+  createDataset: (data: { name: string; kind?: string; samples: EvalSampleIn[] }) =>
+    request<EvalDataset>("/evaluation/datasets", { method: "POST", body: data }),
+  runEvaluation: (datasetId: string) =>
+    request<EvalRunResult>(`/evaluation/datasets/${datasetId}/run`, { method: "POST" }),
+
+  // ── admin analytics ──
+  analyticsOverview: () => request<AnalyticsOverview>("/admin/analytics/overview"),
+
+  // ── chat conversations ──
+  listConversations: () => request<Conversation[]>("/chat/conversations"),
+  createConversation: (data: { title?: string; workspace_id?: string }) =>
+    request<Conversation>("/chat/conversations", { method: "POST", body: data }),
+  listMessages: (conversationId: string) =>
+    request<ChatMessage[]>(`/chat/conversations/${conversationId}/messages`),
 };
