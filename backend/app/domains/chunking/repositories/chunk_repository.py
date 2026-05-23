@@ -17,6 +17,10 @@ class ChunkRepository(Protocol):
     async def list_for_document(self, document_id: uuid.UUID) -> Sequence[Chunk]: ...
     async def count_for_document(self, document_id: uuid.UUID) -> int: ...
     async def delete_for_document(self, document_id: uuid.UUID) -> None: ...
+    async def get_by_ids(self, ids: list[uuid.UUID]) -> Sequence[Chunk]: ...
+    async def search_fulltext(
+        self, *, organization_id: uuid.UUID, workspace_id: uuid.UUID | None, query: str, limit: int
+    ) -> list[tuple[Chunk, float]]: ...
 
 
 class SqlAlchemyChunkRepository:
@@ -42,3 +46,25 @@ class SqlAlchemyChunkRepository:
     async def delete_for_document(self, document_id: uuid.UUID) -> None:
         await self._session.execute(delete(Chunk).where(Chunk.document_id == document_id))
         await self._session.flush()
+
+    async def get_by_ids(self, ids: list[uuid.UUID]) -> Sequence[Chunk]:
+        if not ids:
+            return []
+        result = await self._session.execute(select(Chunk).where(Chunk.id.in_(ids)))
+        return result.scalars().all()
+
+    async def search_fulltext(
+        self, *, organization_id: uuid.UUID, workspace_id: uuid.UUID | None, query: str, limit: int
+    ) -> list[tuple[Chunk, float]]:
+        tsvector = func.to_tsvector("english", Chunk.content)
+        tsquery = func.plainto_tsquery("english", query)
+        rank = func.ts_rank(tsvector, tsquery)
+
+        conditions = [Chunk.organization_id == organization_id, tsvector.op("@@")(tsquery)]
+        if workspace_id is not None:
+            conditions.append(Chunk.workspace_id == workspace_id)
+
+        result = await self._session.execute(
+            select(Chunk, rank.label("rank")).where(*conditions).order_by(rank.desc()).limit(limit)
+        )
+        return [(row[0], float(row[1])) for row in result.all()]

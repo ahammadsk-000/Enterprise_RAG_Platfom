@@ -29,6 +29,14 @@ from app.domains.documents.repositories.document_repository import SqlAlchemyDoc
 from app.domains.documents.repositories.ingestion_job_repository import SqlAlchemyIngestionJobRepository
 from app.domains.documents.services.document_service import DocumentService
 from app.domains.ingestion.task_bus import CeleryTaskBus, TaskBus
+from app.domains.rag.services.rag_service import RagService
+from app.domains.retrieval.repositories.retrieval_log_repository import SqlAlchemyRetrievalLogRepository
+from app.domains.retrieval.retrievers.bm25 import BM25Retriever
+from app.domains.retrieval.retrievers.dense import DenseRetriever
+from app.domains.retrieval.services.retrieval_service import RetrievalService
+from app.integrations.embeddings.factory import get_embedding_provider
+from app.integrations.llm.factory import get_llm_provider
+from app.integrations.reranker.factory import get_reranker
 from app.integrations.storage.factory import get_object_storage
 from app.integrations.vectorstore.factory import get_vector_store
 
@@ -97,3 +105,26 @@ def get_document_service(session: DbSession, task_bus: TaskBusDep) -> DocumentSe
 
 
 DocumentServiceDep = Annotated[DocumentService, Depends(get_document_service)]
+
+
+# ── Retrieval / RAG ──────────────────────────────────────────────────────────
+def _build_retrieval_service(session: AsyncSession) -> RetrievalService:
+    chunks = SqlAlchemyChunkRepository(session)
+    return RetrievalService(
+        dense=DenseRetriever(get_embedding_provider(), get_vector_store(), chunks),
+        bm25=BM25Retriever(chunks),
+        reranker=get_reranker(),
+        logs=SqlAlchemyRetrievalLogRepository(session),
+    )
+
+
+def get_retrieval_service(session: DbSession) -> RetrievalService:
+    return _build_retrieval_service(session)
+
+
+def get_rag_service(session: DbSession) -> RagService:
+    return RagService(retrieval=_build_retrieval_service(session), llm=get_llm_provider())
+
+
+RetrievalServiceDep = Annotated[RetrievalService, Depends(get_retrieval_service)]
+RagServiceDep = Annotated[RagService, Depends(get_rag_service)]
