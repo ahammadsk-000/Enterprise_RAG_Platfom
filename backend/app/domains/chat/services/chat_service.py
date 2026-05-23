@@ -34,6 +34,10 @@ _HISTORY_TURNS = 8
 _MAX_CONTEXT_TOKENS = 3000
 _DEFAULT_TITLE = "New conversation"
 _TITLE_MAX = 60
+_NO_CONTEXT = (
+    "I couldn't find anything relevant to that in your documents. Try rephrasing, "
+    "or make sure the source is uploaded and indexed."
+)
 
 
 class ChatService:
@@ -86,8 +90,15 @@ class ChatService:
     ) -> ChatResponse:
         start = time.perf_counter()
         history, context = await self._prepare(conversation, user_id, req)
-        messages = self._build_messages(conversation, history, context, req.query)
 
+        if not context:
+            assistant, latency_ms = await self._finalize_no_context(conversation, start)
+            return ChatResponse(
+                message_id=assistant.id, answer=_NO_CONTEXT, citations=[], confidence=0.0,
+                model=self._llm.model_name, prompt_tokens=0, completion_tokens=0, latency_ms=latency_ms,
+            )
+
+        messages = self._build_messages(conversation, history, context, req.query)
         result = await self._llm.generate(messages, temperature=req.temperature)
         citations = build_citations(result.text, context)
         confidence = confidence_score(result.text, context, citations)
@@ -116,8 +127,17 @@ class ChatService:
     ) -> AsyncIterator[dict]:
         start = time.perf_counter()
         history, context = await self._prepare(conversation, user_id, req)
-        messages = self._build_messages(conversation, history, context, req.query)
 
+        if not context:
+            assistant, latency_ms = await self._finalize_no_context(conversation, start)
+            yield {"type": "token", "content": _NO_CONTEXT}
+            yield {
+                "type": "done", "message_id": str(assistant.id), "citations": [],
+                "confidence": 0.0, "model": self._llm.model_name, "latency_ms": latency_ms,
+            }
+            return
+
+        messages = self._build_messages(conversation, history, context, req.query)
         buffer: list[str] = []
         async for token in self._llm.stream(messages, temperature=req.temperature):
             buffer.append(token)
@@ -144,6 +164,18 @@ class ChatService:
         }
 
     # ── internals ─────────────────────────────────────────────────────────────
+    async def _finalize_no_context(
+        self, conversation: Conversation, start: float
+    ) -> tuple[Message, float]:
+        """Persist a grounded 'no relevant sources' answer (skips the LLM)."""
+        latency_ms = round((time.perf_counter() - start) * 1000, 2)
+        assistant = await self._persist_assistant(
+            conversation, _NO_CONTEXT, None, [], 0.0, 0, len(_NO_CONTEXT.split()), latency_ms
+        )
+        await self._conversations.touch(conversation)
+        await self._session.commit()
+        return assistant, latency_ms
+
     async def _prepare(
         self, conversation: Conversation, user_id: uuid.UUID, req: ChatRequest
     ) -> tuple[Sequence[Message], list[RetrievedChunk]]:

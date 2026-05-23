@@ -20,6 +20,11 @@ from app.integrations.llm.base import LLMProvider
 
 logger = get_logger(__name__)
 
+_NO_CONTEXT = (
+    "I couldn't find anything relevant to that in your documents. Try rephrasing, "
+    "or make sure the source is uploaded and indexed."
+)
+
 
 class RagService:
     def __init__(
@@ -48,6 +53,14 @@ class RagService:
             user_id=user_id,
         )
         context = compress(retrieved, max_tokens=self._max_context_tokens)
+
+        if not context:
+            latency_ms = round((time.perf_counter() - start) * 1000, 2)
+            return RagAnswer(
+                answer=_NO_CONTEXT, citations=[], confidence=0.0, model=self._llm.model_name,
+                strategy=query.strategy, retrieved=0, prompt_tokens=0, completion_tokens=0,
+                latency_ms=latency_ms,
+            )
 
         messages = build_messages(query.query, context)
         result = await self._llm.generate(messages, temperature=query.temperature)
