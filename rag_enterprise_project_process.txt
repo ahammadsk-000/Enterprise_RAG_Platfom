@@ -1,0 +1,443 @@
+================================================================================
+ENTERPRISE RAG PLATFORM — PROJECT PROCESS & TECHNICAL OVERVIEW
+================================================================================
+Last updated: 2026-05-23
+Repo root : d:\My_Code_Files\RAG_Project\Enterprise_RAG_Platfom
+Audience  : Any engineer new to the project. Read this top-to-bottom to understand
+            what the platform is, how it is built, what was implemented in each
+            phase, how to run it, and where to find things.
+
+--------------------------------------------------------------------------------
+0. WHAT THIS PROJECT IS
+--------------------------------------------------------------------------------
+A production-style, multi-tenant Retrieval-Augmented Generation (RAG) platform for
+enterprise knowledge — similar in spirit to AnythingLLM / Dify / enterprise ChatGPT.
+Users upload documents; the system parses, chunks, embeds and indexes them, then
+answers questions with citations grounded in those documents. It also provides a
+knowledge graph, multi-agent research, RAG evaluation, observability, and a full
+web UI.
+
+Built FastAPI-first with clean architecture + Domain-Driven Design, async
+everywhere, provider abstractions for all AI/infra so components are swappable, and
+a React UI. Ships in two run modes: a lightweight "demo mode" (laptop-friendly) and
+a full Docker stack (real models + persistent infra).
+
+--------------------------------------------------------------------------------
+1. HIGH-LEVEL ARCHITECTURE
+--------------------------------------------------------------------------------
+Clients (React SPA / REST / WebSocket)
+        |  HTTPS / WSS
+   Nginx (edge: TLS, rate-limit) [prod]
+        |
+   FastAPI API gateway  --- AuthN/Z, RBAC, tenant scoping, dependency injection
+        |          \            \              \
+   Domain services   RAG engine   Agents (graph)  Ingestion (enqueue)
+        |              |             |               |
+   PostgreSQL       Retrieval     LangGraph-style   Celery workers
+   (system of       (dense+BM25+  state machine     (ocr/parse/chunk/
+    record)          rerank+RRF)                     embed/index/graph)
+        |              |   \                              |
+   Qdrant (vectors)  Neo4j (graph)   Redis (cache/broker)  Object store (S3/MinIO)
+        |
+   Observability: OpenTelemetry -> collector; Prometheus /metrics; Grafana; Loki
+
+Design rules:
+- Clean Architecture + DDD: each business "domain" owns models, schemas,
+  repositories, services. Imports point inward (api -> services -> repo interfaces).
+- Async-first: all request + DB paths are async; heavy work goes to Celery workers.
+- Event-driven ingestion pipeline: upload -> parse/OCR -> chunk -> embed -> index
+  -> graph-extract, each a stage with its own job record.
+- Provider abstractions (Protocols) for LLM, embeddings, vector store, graph store,
+  OCR, object storage, reranker — selected by a factory from settings; fakes/
+  in-memory variants used in tests and demo mode.
+- Multi-tenancy: every tenant-owned row carries organization_id; queries are
+  tenant-scoped; vector/graph payloads filtered by tenant + workspace.
+
+--------------------------------------------------------------------------------
+2. TECH STACK
+--------------------------------------------------------------------------------
+Backend      : Python 3.12, FastAPI, Uvicorn/Gunicorn, Pydantic v2,
+               SQLAlchemy 2 (async) + asyncpg, Alembic, PostgreSQL,
+               Redis, Celery, WebSockets, structlog
+Auth         : PyJWT (access+refresh), passlib[argon2], Authlib (OAuth2/OIDC SSO)
+AI / ML      : LLM providers (Ollama default / OpenAI-compatible / fake),
+               embeddings (Ollama / SentenceTransformers / OpenAI / fake),
+               Qdrant (vector DB), Neo4j (graph), cross-encoder reranker
+Doc parsing  : PyMuPDF (PDF), python-docx (DOCX), stdlib HTML parser, plain text;
+               OCR via Tesseract (full stack) / null (demo)
+Frontend     : React 18, TypeScript, Vite, TailwindCSS, Zustand (client state),
+               React Query (server state), React Router, CodeMirror 6 (editor)
+DevOps/Obs   : Docker, Docker Compose, Helm, GitHub Actions, Nginx,
+               Prometheus, Grafana, Loki, OpenTelemetry
+
+--------------------------------------------------------------------------------
+3. MONOREPO STRUCTURE
+--------------------------------------------------------------------------------
+Enterprise_RAG_Platfom/
+  README.md
+  docker-compose.yml                full local stack
+  enterprise_rag.bat                full-stack launcher (Docker)
+  enterprise_rag_demo.bat           lightweight demo launcher (native + 1 Postgres)
+  rag_enterprise_project_process.txt  (this file)
+  docs/architecture/                01..08 design docs (system, infra, monorepo,
+                                    backend, frontend, DB schema, AI pipeline, deploy)
+  samples/                          ready-made test documents + suggested queries
+  backend/
+    pyproject.toml                  deps, ruff, mypy, pytest config (full deps)
+    requirements-demo.txt           lightweight runtime deps for demo mode
+    alembic.ini
+    app/
+      main.py                       FastAPI app factory + lifespan + middleware
+      core/                         config, logging, security (JWT/argon2),
+                                    exceptions (RFC9457), middleware, metrics,
+                                    telemetry, ratelimit
+      db/                           Base, async session, migrations/ (0001..0007)
+      api/
+        deps.py                     shared dependencies (auth, tenant, RBAC, DI)
+        v1/router.py                aggregates all v1 routers
+        v1/routes/                  health, auth, oauth, users, workspaces,
+                                    documents, search, rag, assist, graph, agents,
+                                    evaluation, admin, chat
+        ws/chat.py                  WebSocket streaming chat endpoint
+      domains/                      DDD bounded contexts (see section 6)
+      integrations/                 provider adapters: llm, embeddings, vectorstore,
+                                    graphstore, reranker, ocr, storage, cache
+      workers/                      celery app + tasks (ingestion pipeline)
+      tests/                        unit/ (no DB) + integration/ (gated, needs Postgres)
+    .venv/                          (demo) local virtual env
+  frontend/
+    src/
+      lib/        api client (auth+refresh), ws client, editor extensions, wordlist,
+                  aiComplete (ghost-text), queryClient
+      stores/     zustand: auth, workspace
+      types/      TS mirror of backend schemas
+      components/ Layout (sidebar + workspace switcher) + Tailwind UI primitives
+      features/   auth, chat, documents (+ editor), search, graph, agents,
+                  evaluation, workspaces, admin
+  infra/
+    docker/       backend + frontend Dockerfiles
+    helm/enterprise-rag/  Helm chart (api/HPA, per-queue workers, beat, ingress,
+                  configmap/secret, pre-upgrade Alembic migration Job) + values
+    observability/  prometheus, otel-collector configs
+  .github/workflows/ci.yml          lint/type/test (Postgres), frontend build, image+scan
+
+--------------------------------------------------------------------------------
+4. IMPLEMENTATION PHASES (what was built, in order)
+--------------------------------------------------------------------------------
+Each phase was implemented, tested, and committed separately on the `main` branch.
+
+PHASE 1 — Foundation + Identity/RBAC/SSO
+  - Architecture docs; monorepo scaffold; backend core (Pydantic settings, structlog,
+    RFC9457 errors, request-context middleware, async DB session/Base, app factory,
+    health probes); docker-compose; Alembic; Celery app.
+  - Identity domain: organizations, users, roles, permissions, memberships, api_keys,
+    oauth_accounts. argon2 password hashing; JWT access/refresh with rotation.
+  - RBAC: 18 permission codes, 4 system roles (owner/admin/member/viewer);
+    require_permission dependency + tenant guard.
+  - Auth routes (register/login/refresh/me); OAuth2/OIDC SSO (Google/Microsoft via
+    Authlib, config-gated); users/members. Migration 0001 seeds permissions/roles.
+
+PHASE 2 — Document ingestion + OCR
+  - documents + ingestion_jobs models; status/stage enums; migration 0002.
+  - ObjectStorage abstraction (S3/MinIO + in-memory + factory).
+  - OCR engine abstraction (Tesseract + null + factory).
+  - Parser registry: plain-text, HTML (stdlib), PDF (PyMuPDF + OCR fallback), DOCX,
+    image; MIME resolution + validation.
+  - Metadata: SHA-256 content hashing (dedupe), language detection, counts.
+  - DocumentService (upload+dedupe/list/get/status/delete) + IngestionService
+    orchestrator (PARSE -> METADATA, per-stage job rows). Celery ingest task +
+    TaskBus abstraction. Document REST API.
+
+PHASE 3 — Chunking + Embeddings + Vector DB
+  - chunks + embedding_versions models; migration 0003.
+  - Chunkers (registry, per-workspace strategy): recursive (default), parent/child,
+    semantic (sentence-aware), table-aware, code-aware; token estimation.
+  - EmbeddingProvider Protocol (Ollama/SentenceTransformers/OpenAI/fake) + factory;
+    embedding cache keyed by version:content_hash.
+  - VectorStore Protocol (Qdrant + in-memory) + factory; one collection per org.
+  - ChunkingService (idempotent) + EmbeddingService (batched, cached, upserts
+    vectors, records vector_id + embedding_version_id).
+  - Ingestion extended: PARSE -> METADATA -> CHUNK -> INDEX -> INDEXED.
+  - Document reindex endpoint; chunk_count in status; vector cleanup on delete.
+
+PHASE 4 — Hybrid retrieval + RAG engine + citations
+  - LLM provider abstraction (Ollama/OpenAI/fake) with generate + stream;
+    cross-encoder reranker (+ null) behind factories.
+  - DenseRetriever (vector ANN, hydrates content from Postgres) + BM25Retriever
+    (PostgreSQL full-text search; GIN expression index from migration 0004).
+  - Reciprocal Rank Fusion (RRF) for hybrid search; context compression
+    (dedupe + token budget); query expansion (identity default, optional LLM).
+  - RetrievalService: strategy-aware (dense/bm25/hybrid) -> fuse -> rerank -> top_k,
+    with per-query retrieval_logs.
+  - RAG engine: citation-grounded prompt; citation marker parsing/resolution;
+    confidence scoring (retrieval strength + grounding); RagService.
+  - API: POST /search (retrieval only), POST /rag/query (grounded answer + citations).
+
+PHASE 5 — Streaming chat + workspaces + memory
+  - Workspace model + CRUD; migration 0005 also backfills workspace_id FKs on
+    documents/chunks/memberships. Long-term Memory model + repo.
+  - Conversation + Message models (chat history = conversation memory).
+  - ChatService: conversation CRUD + grounded answers reusing the retrieval/citation
+    engine, with recent history injected into the prompt; non-streaming answer() and
+    streaming stream_answer() async generator.
+  - WebSocket endpoint /api/v1/ws/chat/{conversation_id} (token auth; streams token
+    events then a done event with citations/confidence). REST chat routes.
+
+PHASE 6 — Graph RAG (knowledge graph)
+  - GraphStore abstraction: Neo4j (lazy async driver) + in-memory + factory;
+    per-tenant isolation, document_id provenance on relations.
+  - Entity/relation extractors: rule-based (deterministic) and LLM-based (JSON output
+    with rule-based fallback) + factory.
+  - GraphBuilder (extract -> upsert) and GraphRetrievalService (query -> seed
+    entities -> k-hop neighbor traversal). Ingestion gains optional GRAPH stage.
+  - POST /graph/explore endpoint.
+
+PHASE 7 — Multi-agent retrieval
+  - agent_runs + agent_steps models; migration 0006.
+  - ResearchAgentGraph: typed state machine planner -> retriever -> summarizer ->
+    verifier -> citation, with a single re-retrieval loop on failed verification.
+    Dependency-free orchestrator shaped like a LangGraph StateGraph (swappable).
+  - AgentService persists run + per-node steps; POST /agents/research.
+
+PHASE 8 — RAG evaluation
+  - Heuristic metrics (deterministic, dependency-free, CI-friendly): faithfulness,
+    answer_relevancy, context_precision, context_recall, hallucination — pluggable
+    behind evaluate_sample for an LLM/RAGAS upgrade.
+  - eval_datasets/eval_samples/eval_runs/eval_results models; migration 0007.
+  - EvalService: create golden datasets, run offline eval (answer from gold contexts
+    -> score -> persist per-sample + aggregate). Endpoints: datasets create/list, run.
+
+PHASE 9 — Observability
+  - Prometheus metrics (http_requests_total + http_request_duration_seconds) recorded
+    in middleware; exposed at /metrics; prometheus_client optional (no-op if absent).
+  - OpenTelemetry: best-effort FastAPI instrumentation + OTLP export, gated by
+    settings/availability (never breaks startup).
+  - Admin analytics: AnalyticsService aggregates tenant usage (documents,
+    conversations, messages, tokens, avg confidence, retrieval queries + latency,
+    agent runs); GET /admin/analytics/overview.
+
+PHASE 10 — Kubernetes/Helm + CI + hardening
+  - Rate limiting (in-memory fixed-window, per-client) + security-headers middleware.
+  - Helm chart: API Deployment+Service+HPA, per-queue worker Deployments, beat,
+    Ingress (TLS/cert-manager), ConfigMap+Secret+ServiceAccount, pre-upgrade Alembic
+    migration Job (helm hook); values + values-staging.
+  - GitHub Actions CI: backend (ruff/mypy/pytest unit + Postgres integration),
+    frontend build, docker build + Trivy scan on main.
+
+FRONTEND (full platform UI)
+  - React SPA wired to the backend (Vite dev proxy includes ws:true for chat socket).
+  - Pages: Login/Register; Chat (WebSocket streaming, conversation sidebar, citations,
+    confidence; auto-titled conversations; rename/delete; "no relevant sources"
+    handling); Search (hybrid/dense/bm25 + rerank toggle); Documents (upload, status
+    polling, reindex, delete, in-app editor, download, extract-to-markdown); Graph
+    explorer; Agents (answer + plan + step timeline); Evaluation runner; Workspaces
+    (CRUD + sidebar switcher); Admin analytics dashboard.
+
+DOCUMENT EDITOR (added after core phases)
+  - In-app CodeMirror 6 editor for text files (txt/md/html/csv/json/code):
+    native spellcheck (browser), dictionary + document-word autocomplete, and
+    AI inline completion ("ghost text", Tab to accept) via POST /assist/complete.
+  - Save -> stores new bytes, drops stale vectors, re-runs ingestion (re-index).
+  - Download (raw file or edited buffer).
+  - "Extract -> MD" for binary docs (PDF/DOCX): creates an editable .md from the
+    already-extracted text (indexed); original kept and downloadable.
+
+--------------------------------------------------------------------------------
+5. DATABASE & MIGRATIONS (PostgreSQL is the system of record)
+--------------------------------------------------------------------------------
+Conventions: UUID PKs, created_at/updated_at, organization_id on tenant-owned tables.
+Vectors live in Qdrant; the graph lives in Neo4j; Postgres holds authoritative
+metadata + provenance that ties them together.
+
+Alembic migrations (run with `alembic upgrade head`):
+  0001_initial_identity     organizations, users, roles, permissions, memberships,
+                            api_keys, oauth_accounts (+ seed permissions/roles)
+  0002_documents            documents, ingestion_jobs
+  0003_chunks_embeddings    chunks, embedding_versions
+  0004_retrieval            chunks full-text GIN index + retrieval_logs
+  0005_workspaces_chat      workspaces, memories, conversations, messages
+                            (+ workspace_id FKs on documents/chunks/memberships)
+  0006_agents               agent_runs, agent_steps
+  0007_evaluation           eval_datasets, eval_samples, eval_runs, eval_results
+
+--------------------------------------------------------------------------------
+6. BACKEND DOMAINS (app/domains/<context>/ : models, schemas, repositories, services)
+--------------------------------------------------------------------------------
+  identity     orgs/users/roles/permissions/memberships/api_keys/oauth; AuthService,
+               RBAC policy, OAuth/SSO
+  workspaces   Workspace + Memory; WorkspaceService
+  documents    Document + IngestionJob; DocumentService (upload/edit/extract/etc.)
+  ingestion    parsers (registry), metadata, IngestionService orchestrator, TaskBus
+  chunking     chunkers (registry), tokenizer, Chunk model, ChunkingService
+  embeddings   EmbeddingVersion model, EmbeddingService
+  retrieval    dense/bm25 retrievers, RRF fusion, compression, query expansion,
+               RetrievalService, RetrievalLog
+  rag          prompts, citations, RagService
+  chat         Conversation + Message; ChatService (streaming + memory + rename/delete)
+  graphrag     extractors (rule/LLM), GraphBuilder, GraphRetrievalService
+  agents       AgentRun + AgentStep; ResearchAgentGraph; AgentService
+  evaluation   metrics (heuristics), datasets/runs models, EvalService
+  observability AnalyticsService
+
+NOTE on security: implemented = JWT auth, OAuth2/OIDC SSO, RBAC, tenant isolation,
+argon2 hashing, rate limiting, security headers. Designed in the architecture docs
+but NOT yet implemented = PII detection/masking, prompt-injection screening, content
+moderation, audit-log table. (Good "next" items.)
+
+--------------------------------------------------------------------------------
+7. API ENDPOINTS (prefix /api/v1 unless noted)
+--------------------------------------------------------------------------------
+  GET  /healthz, /readyz                      liveness / readiness
+  GET  /metrics            (app root)         Prometheus metrics
+  Auth   POST /auth/register | /auth/login | /auth/refresh ; GET /auth/me
+         GET  /auth/oauth/{provider}/login | /callback
+  Users  GET  /users/members
+  Workspaces  POST|GET /workspaces ; GET|DELETE /workspaces/{id}
+  Documents   POST /documents (upload) ; GET /documents ; GET /documents/{id}
+              GET /documents/{id}/status ; GET|PUT /documents/{id}/content
+              GET /documents/{id}/download ; POST /documents/{id}/extract-markdown
+              POST /documents/{id}/reindex ; DELETE /documents/{id}
+  Search      POST /search
+  RAG         POST /rag/query
+  Assist      POST /assist/complete           (AI inline completion)
+  Graph       POST /graph/explore
+  Agents      POST /agents/research
+  Evaluation  POST|GET /evaluation/datasets ; POST /evaluation/datasets/{id}/run
+  Admin       GET  /admin/analytics/overview
+  Chat        POST|GET /chat/conversations ; GET /chat/conversations/{id}/messages
+              POST /chat/conversations/{id}/messages
+              PATCH|DELETE /chat/conversations/{id}
+  Chat WS     /api/v1/ws/chat/{conversation_id}?token=<access_token>
+  Interactive API docs: /docs (Swagger) and /redoc.
+
+--------------------------------------------------------------------------------
+8. PROVIDER ABSTRACTIONS (swap real vs fake/in-memory via settings + factories)
+--------------------------------------------------------------------------------
+  Capability     Interface            Demo (ENVIRONMENT=test)   Full stack
+  LLM            LLMProvider          FakeLLMProvider           Ollama (llama3.1:8b)
+  Embeddings     EmbeddingProvider    FakeEmbeddingProvider     Ollama nomic-embed-text
+  Vector store   VectorStore          InMemoryVectorStore       Qdrant
+  Graph store    GraphStore           InMemoryGraphStore        Neo4j
+  Entity extract EntityExtractor      RuleBasedExtractor        LLMEntityExtractor
+  Reranker       Reranker             NullReranker              CrossEncoderReranker
+  Object storage ObjectStorage        InMemoryObjectStorage     S3/MinIO
+  OCR            OCREngine            NullOCREngine             TesseractOCREngine
+  Ingestion bus  TaskBus              InlineTaskBus (in-process) CeleryTaskBus (worker)
+
+--------------------------------------------------------------------------------
+9. HOW TO RUN
+--------------------------------------------------------------------------------
+A) DEMO MODE (recommended for laptops, ~1 GB) — enterprise_rag_demo.bat
+   - Needs: Docker Desktop running (for ONE small Postgres container), Python 3.12,
+     Node 20+.
+   - The launcher: starts a Postgres container; creates backend/.venv and installs
+     requirements-demo.txt; runs `alembic upgrade head`; starts native uvicorn
+     (ENVIRONMENT=test, INGESTION_INLINE=true) + native Vite frontend; opens
+     http://localhost:5173.
+   - Uses fake LLM/embeddings + in-memory vector/graph/object stores + inline
+     ingestion. Retrieval, chunking, citations, graph, agents, eval are all REAL;
+     only the LLM/embeddings are stubbed and the in-memory stores reset on restart.
+   - After a backend restart, re-upload documents (in-memory stores are cleared;
+     Postgres rows persist).
+
+B) FULL STACK (~10 GB, real models) — enterprise_rag.bat
+   - Needs: Docker Desktop; ~10 GB RAM; one-time Ollama model pull:
+        docker compose exec ollama ollama pull llama3.1:8b
+        docker compose exec ollama ollama pull nomic-embed-text
+   - The launcher: brings up the full docker-compose stack (api, worker, beat,
+     postgres, redis, qdrant, neo4j, minio, ollama, observability, frontend),
+     runs migrations, opens the app. Real LLM answers, real semantic search,
+     persistent Qdrant/Neo4j/MinIO, Celery worker, Tesseract OCR, Prometheus/Grafana.
+
+C) MANUAL (developers)
+   - Backend: cd backend ; pip install -e ".[dev]" ; alembic upgrade head ;
+     uvicorn app.main:app --reload   (needs Postgres; configure backend/.env)
+   - Frontend: cd frontend ; npm install ; npm run dev
+
+DEMO vs FULL: same UI, same features, same code paths. Difference is AI quality +
+persistence: demo = fake LLM/embeddings + in-memory stores; full = real Ollama
+models + Qdrant/Neo4j/MinIO that persist across restarts.
+
+--------------------------------------------------------------------------------
+10. TESTING
+--------------------------------------------------------------------------------
+  Unit tests (no DB, run anywhere):   cd backend ; pytest tests/unit
+    Cover: security/JWT, RBAC, parsers, chunkers, metadata, embeddings + vector
+    store, full ingestion pipeline (fakes), RRF/compression, citations, retrieval +
+    RAG (fakes), chat service, graph RAG, agents, evaluation metrics, observability,
+    rate limiter, demo-mode toggle. (59 unit tests passing.)
+  Integration tests (need Postgres):  pytest -m integration   (auth flow,
+    document API, full search/RAG flow). Gated so unit tests run without infra.
+  Frontend: npm run build  (tsc type-check + vite production build).
+  CI runs lint (ruff), type-check (mypy), unit + integration (with a Postgres
+  service), and the frontend build.
+
+--------------------------------------------------------------------------------
+11. KEY DESIGN DECISIONS & NOTABLE FIXES (history that explains the code)
+--------------------------------------------------------------------------------
+- Provider Protocols + factories everywhere -> demo and tests use fakes/in-memory
+  with zero changes to business logic; heavy libs are imported lazily so the app
+  runs without them.
+- Inline ingestion (InlineTaskBus) for demo: runs the real pipeline in-process via
+  asyncio so no Celery/Redis/worker is needed on a laptop.
+- BM25 = PostgreSQL full-text search (to_tsvector @@ plainto_tsquery) with a GIN
+  expression index — no extra search engine; hybrid fuses it with dense via RRF.
+- Demo launcher runs uvicorn WITHOUT --reload so editing files mid-session doesn't
+  restart the backend and wipe the in-memory stores.
+- Chat: fixed a race where creating a conversation triggered a history-load that
+  overwrote the streaming answer; history now loads only on explicit selection.
+- Conversations auto-title from the first question; support rename + delete.
+- When retrieval returns no context, Chat/RAG short-circuit with a clear
+  "no relevant sources" message instead of a hallucinated answer.
+- Graph in-memory store de-duplicates neighbors so the explorer shows distinct
+  entities.
+- Documents: duplicate uploads are detected by content hash and surfaced in the UI;
+  PDF/DOCX support added to demo via pymupdf + python-docx (scanned PDFs still need
+  the full-stack OCR).
+
+--------------------------------------------------------------------------------
+12. GIT HISTORY (branch: main)
+--------------------------------------------------------------------------------
+Phase commits (newest first), plus the post-phase feature work:
+  - chat rename/delete, no-context handling, chat streaming race fix, auto-title
+  - extract-to-markdown, demo PDF/DOCX support
+  - document editor (CodeMirror) + AI inline completion (Tier C)
+  - full platform UI (graph/agents/eval/admin/workspaces + streaming chat)
+  - demo mode (inline ingestion + native launcher)
+  - one-click launchers (enterprise_rag.bat, enterprise_rag_demo.bat)
+  - feat(phase-10) Kubernetes/Helm + CI + hardening      (b91fb6a)
+  - feat(phase-9)  observability                          (3b310bd)
+  - feat(phase-8)  RAG evaluation                         (286cb18)
+  - feat(phase-7)  multi-agent retrieval                  (31937c9)
+  - feat(phase-6)  Graph RAG                              (acfbc40)
+  - feat(phase-5)  workspaces + chat + memory             (0b58281)
+  - feat(phase-4)  hybrid retrieval + RAG + citations     (261b940)
+  - feat(phase-3)  chunking + embeddings + Qdrant         (41a8d8a)
+  - feat(phase-2)  document ingestion + OCR + SSO         (0ba95ad)
+  - feat(phase-1)  foundation + identity/RBAC/SSO         (fcce7e9)
+The dedicated repo lives at the project folder (its own git history); the parent
+D:\My_Code_Files is unrelated.
+
+--------------------------------------------------------------------------------
+13. WHERE TO LOOK FIRST (new-engineer reading order)
+--------------------------------------------------------------------------------
+  1. docs/architecture/01-system-architecture.md ... 08-deployment-architecture.md
+  2. backend/app/main.py                 (how the app wires together)
+  3. backend/app/api/deps.py             (DI: how services/providers are assembled)
+  4. backend/app/domains/ingestion/services/ingestion_service.py  (the pipeline)
+  5. backend/app/domains/retrieval/services/retrieval_service.py  (hybrid search)
+  6. backend/app/domains/rag/services/rag_service.py              (grounded answers)
+  7. frontend/src/lib/api.ts + frontend/src/features/*            (the UI)
+  8. samples/README.md                   (data + queries to try)
+
+--------------------------------------------------------------------------------
+14. SUGGESTED NEXT STEPS / NOT-YET-IMPLEMENTED
+--------------------------------------------------------------------------------
+  - AI security: PII detection + masking, prompt-injection screening, content
+    moderation, audit-log table (designed in docs/architecture, not built).
+  - Langfuse / Phoenix LLM tracing wiring (config present, not wired deeply).
+  - Grafana dashboards + Loki log pipeline wiring.
+  - Lightweight version history for edited documents (revertable saves).
+  - Multi-modal RAG (image/chart embeddings) and true DOCX round-trip editing.
+  - Push the repo to a remote (GitHub) — currently local only.
+================================================================================
