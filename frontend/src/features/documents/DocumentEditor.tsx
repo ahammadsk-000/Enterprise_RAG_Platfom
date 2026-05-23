@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { Button, ErrorText, Spinner } from "@/components/ui";
+import { aiCompletion } from "@/lib/aiComplete";
 import { ApiError, api, downloadDocumentFile } from "@/lib/api";
 import { editorExtensions } from "@/lib/editor";
 
@@ -17,6 +18,7 @@ export function DocumentEditor({ documentId, onClose, onSaved }: Props) {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aiEnabled, setAiEnabled] = useState(false);
 
   const content = useQuery({
     queryKey: ["doc-content", documentId],
@@ -28,7 +30,12 @@ export function DocumentEditor({ documentId, onClose, onSaved }: Props) {
   }, [content.data]);
 
   const doc = content.data;
-  const extensions = doc ? editorExtensions(doc.title, doc.mime_type) : [];
+  const extensions = doc
+    ? [
+        ...editorExtensions(doc.title, doc.mime_type),
+        ...(aiEnabled ? aiCompletion((prefix) => api.assistComplete(prefix).then((r) => r.completion)) : []),
+      ]
+    : [];
 
   async function save() {
     setError(null);
@@ -69,9 +76,17 @@ export function DocumentEditor({ documentId, onClose, onSaved }: Props) {
               {dirty && <span className="ml-2 text-amber-400">• unsaved changes</span>}
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-200">
-            ✕
-          </button>
+          <div className="flex items-center gap-4">
+            {doc?.editable && (
+              <label className="flex items-center gap-2 text-xs text-slate-300" title="LLM ghost-text suggestions; Tab to accept (real on full stack, stubbed in demo)">
+                <input type="checkbox" checked={aiEnabled} onChange={(e) => setAiEnabled(e.target.checked)} />
+                AI autocomplete (Tab)
+              </label>
+            )}
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-200">
+              ✕
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-auto">

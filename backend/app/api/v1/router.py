@@ -12,6 +12,7 @@ from app.api.ws import chat as ws_chat
 from app.api.v1.routes import (
     admin,
     agents,
+    assist,
     auth,
     chat,
     documents,
@@ -34,6 +35,7 @@ api_router.include_router(workspaces.router, prefix="/workspaces", tags=["worksp
 api_router.include_router(documents.router, prefix="/documents", tags=["documents"])
 api_router.include_router(search.router, prefix="/search", tags=["search"])
 api_router.include_router(rag.router, prefix="/rag", tags=["rag"])
+api_router.include_router(assist.router, prefix="/assist", tags=["assist"])
 api_router.include_router(graph.router, prefix="/graph", tags=["graph-rag"])
 api_router.include_router(agents.router, prefix="/agents", tags=["agents"])
 api_router.include_router(evaluation.router, prefix="/evaluation", tags=["evaluation"])

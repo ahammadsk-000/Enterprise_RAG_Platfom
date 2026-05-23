@@ -146,6 +146,10 @@ export const api = {
   ragQuery: (data: { query: string; top_k: number; strategy: RetrievalStrategy; rerank: boolean }) =>
     request<RagAnswer>("/rag/query", { method: "POST", body: data }),
 
+  // ── ai assist (inline completion) ──
+  assistComplete: (prefix: string, language?: string) =>
+    request<{ completion: string }>("/assist/complete", { method: "POST", body: { prefix, language } }),
+
   // ── workspaces ──
   listWorkspaces: () => request<Workspace[]>("/workspaces"),
   createWorkspace: (data: { name: string; description?: string; chunking_strategy?: string }) =>
