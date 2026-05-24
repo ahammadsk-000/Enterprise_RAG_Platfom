@@ -441,3 +441,4 @@ D:\My_Code_Files is unrelated.
   - Multi-modal RAG (image/chart embeddings) and true DOCX round-trip editing.
   - Push the repo to a remote (GitHub) — currently local only.
 ================================================================================
+================================================================================
