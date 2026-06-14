@@ -44,7 +44,7 @@ What runs on the free tier — **LITE_MODE** (set in `render.yaml`):
    Render reads `render.yaml` and proposes a service named **`enterprise-rag-backend`**.
 3. When prompted for env vars marked "set manually":
    - `DATABASE_URL` = the Neon string from Step 1.
-   - `CORS_ORIGINS` = `["https://localhost"]` for now (you'll update it in Step 4).
+   - `CORS_ORIGINS` = `https://localhost` for now (you'll update it in Step 4). Plain URL, comma-separated list, or a JSON array are all accepted.
    - `LLM_API_KEY` = your Groq key (see Step 5; or leave blank now and add it after).
 4. Click **Apply**. The first build takes a few minutes. When it's live you'll get:
    ```
@@ -75,7 +75,7 @@ No proxy needed in production.
 ## Step 4 — Connect them (CORS)
 
 1. Back in **Render → enterprise-rag-backend → Environment**, set:
-   - `CORS_ORIGINS` = `["https://<your-app>.vercel.app"]` (your real Vercel URL — no trailing slash).
+   - `CORS_ORIGINS` = `https://<your-app>.vercel.app` (your real Vercel URL — no trailing slash).
 2. **Save** — Render redeploys (~1 min).
 3. Open the Vercel URL, **Register**, upload a `.txt`/`.md`/`.pdf`, and chat. You're live.
 

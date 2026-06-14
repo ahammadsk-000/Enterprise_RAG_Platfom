@@ -12,10 +12,10 @@ Usage:
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field, PostgresDsn, RedisDsn, computed_field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, PostgresDsn, RedisDsn, computed_field, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 Environment = Literal["local", "test", "staging", "production"]
 
@@ -150,8 +150,28 @@ class Settings(BaseSettings):
     environment: Environment = "local"
     debug: bool = True
     api_v1_prefix: str = "/api/v1"
-    # Comma-separated origins, e.g. "http://localhost:5173,https://app.example.com"
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    # Accepts a bare URL, comma-separated URLs, or a JSON array of URLs.
+    # Examples: "https://app.vercel.app"  |  "https://a.com,https://b.com"  |  '["https://a.com"]'
+    # NoDecode disables pydantic-settings' automatic JSON-parsing for this field so the
+    # validator below can handle plain-string formats too.
+    cors_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:5173"]
+    )
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _parse_cors_origins(cls, v):  # type: ignore[no-untyped-def]
+        if v is None or v == "":
+            return []
+        if isinstance(v, list):
+            return v
+        if isinstance(v, str):
+            s = v.strip()
+            if s.startswith("["):
+                import json
+                return json.loads(s)
+            return [o.strip() for o in s.split(",") if o.strip()]
+        return v
     # Per-client requests/minute (0 disables rate limiting).
     rate_limit_per_minute: int = 240
     # Demo/dev: run the ingestion pipeline inline (no Celery worker/broker needed).
