@@ -15,7 +15,7 @@ from app.integrations.storage.base import ObjectStorage
 @lru_cache(maxsize=1)
 def get_object_storage() -> ObjectStorage:
     settings = get_settings()
-    if settings.environment == "test":
+    if settings.environment == "test" or settings.lite_mode:
         from app.integrations.storage.memory import InMemoryObjectStorage
 
         return InMemoryObjectStorage()

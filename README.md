@@ -48,6 +48,10 @@ chunking, citations, graph and agents are all real; only the LLM/embeddings are 
 postgres, redis, qdrant, minio, ollama, neo4j, observability). Needs ~10 GB RAM and a
 one-time `ollama pull` of the chat/embedding models.
 
+**Go live for free** (Vercel + Render + Neon, with auto-deploy on push) —
+see [`docs/DEPLOY_FREE.md`](docs/DEPLOY_FREE.md). A Render Blueprint (`render.yaml`)
+and Vercel config (`frontend/vercel.json`) are included.
+
 ### Manual (local)
 
 ```bash

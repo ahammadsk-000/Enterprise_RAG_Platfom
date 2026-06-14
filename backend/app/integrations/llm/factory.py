@@ -11,7 +11,7 @@ from app.integrations.llm.base import LLMProvider
 @lru_cache(maxsize=1)
 def get_llm_provider() -> LLMProvider:
     settings = get_settings()
-    if settings.environment == "test":
+    if settings.environment == "test" or settings.llm.provider == "fake":
         from app.integrations.llm.fake import FakeLLMProvider
 
         return FakeLLMProvider()

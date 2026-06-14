@@ -10,11 +10,12 @@ from app.integrations.graphstore.base import GraphStore
 
 @lru_cache(maxsize=1)
 def get_graph_store() -> GraphStore:
-    if get_settings().environment == "test":
+    settings = get_settings()
+    if settings.environment == "test" or settings.lite_mode:
         from app.integrations.graphstore.memory import InMemoryGraphStore
 
         return InMemoryGraphStore()
 
     from app.integrations.graphstore.neo4j import Neo4jGraphStore
 
-    return Neo4jGraphStore(get_settings().neo4j)
+    return Neo4jGraphStore(settings.neo4j)

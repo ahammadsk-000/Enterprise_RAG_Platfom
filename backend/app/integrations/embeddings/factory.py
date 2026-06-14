@@ -11,12 +11,12 @@ from app.integrations.embeddings.base import EmbeddingProvider
 @lru_cache(maxsize=1)
 def get_embedding_provider() -> EmbeddingProvider:
     settings = get_settings()
-    if settings.environment == "test":
+    provider = settings.llm.embedding_provider
+    if settings.environment == "test" or provider == "fake":
         from app.integrations.embeddings.fake import FakeEmbeddingProvider
 
         return FakeEmbeddingProvider(dim=settings.llm.embedding_dim)
 
-    provider = settings.llm.embedding_provider
     if provider == "ollama":
         from app.integrations.embeddings.ollama import OllamaEmbeddingProvider
 

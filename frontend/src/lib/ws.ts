@@ -12,9 +12,18 @@ export function openChatSocket(
     onClose?: () => void;
   },
 ): WebSocket {
-  const proto = window.location.protocol === "https:" ? "wss" : "ws";
   const token = encodeURIComponent(tokenStore.access ?? "");
-  const url = `${proto}://${window.location.host}/api/v1/ws/chat/${conversationId}?token=${token}`;
+  // VITE_API_BASE (set on Vercel) points to the backend origin in production. In dev
+  // we use the page's host so the Vite proxy (ws: true) forwards the upgrade.
+  const apiBase = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
+  let wsBase: string;
+  if (apiBase) {
+    wsBase = apiBase.replace(/^http/, "ws"); // http(s):// -> ws(s)://
+  } else {
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    wsBase = `${proto}://${window.location.host}`;
+  }
+  const url = `${wsBase}/api/v1/ws/chat/${conversationId}?token=${token}`;
   const socket = new WebSocket(url);
 
   socket.onopen = () => handlers.onOpen?.();

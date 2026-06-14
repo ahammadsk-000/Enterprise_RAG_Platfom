@@ -23,7 +23,10 @@ import type {
   Workspace,
 } from "@/types/api";
 
-const BASE = "/api/v1";
+// In dev, the Vite proxy serves /api → backend. In production (Vercel), set
+// VITE_API_BASE to the absolute backend URL (e.g. https://your-app.onrender.com).
+const API_ORIGIN = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
+const BASE = `${API_ORIGIN}/api/v1`;
 const ACCESS_KEY = "rag.access_token";
 const REFRESH_KEY = "rag.refresh_token";
 

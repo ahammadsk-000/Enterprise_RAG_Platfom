@@ -10,6 +10,7 @@ from app.integrations.ocr.base import NullOCREngine, OCREngine, TesseractOCREngi
 
 @lru_cache(maxsize=1)
 def get_ocr_engine() -> OCREngine:
-    if get_settings().environment == "test":
+    settings = get_settings()
+    if settings.environment == "test" or settings.lite_mode:
         return NullOCREngine()
     return TesseractOCREngine()

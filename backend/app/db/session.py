@@ -20,14 +20,16 @@ from sqlalchemy.ext.asyncio import (
 from app.core.config import get_settings
 
 _settings = get_settings()
+_dsn, _connect_args = _settings.resolved_db()
 
 engine: AsyncEngine = create_async_engine(
-    _settings.db.dsn,
+    _dsn,
     echo=_settings.db.echo,
     pool_size=_settings.db.pool_size,
     max_overflow=_settings.db.max_overflow,
     pool_pre_ping=True,
     future=True,
+    connect_args=_connect_args,
 )
 
 AsyncSessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(

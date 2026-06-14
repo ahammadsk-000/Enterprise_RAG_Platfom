@@ -10,7 +10,8 @@ from app.integrations.reranker.base import Reranker
 
 @lru_cache(maxsize=1)
 def get_reranker() -> Reranker:
-    if get_settings().environment == "test":
+    settings = get_settings()
+    if settings.environment == "test" or settings.lite_mode:
         from app.integrations.reranker.base import NullReranker
 
         return NullReranker()

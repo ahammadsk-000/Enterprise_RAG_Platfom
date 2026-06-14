@@ -102,11 +102,11 @@ class LLMSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="LLM_", extra="ignore")
 
-    provider: Literal["ollama", "vllm", "openai"] = "ollama"
+    provider: Literal["ollama", "vllm", "openai", "fake"] = "ollama"
     base_url: str = "http://localhost:11434"
     api_key: str | None = None
     chat_model: str = "llama3.1:8b"
-    embedding_provider: Literal["ollama", "sentence_transformers", "openai"] = "ollama"
+    embedding_provider: Literal["ollama", "sentence_transformers", "openai", "fake"] = "ollama"
     embedding_model: str = "nomic-embed-text"
     embedding_dim: int = 768
     request_timeout_s: int = 60
@@ -156,6 +156,12 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 240
     # Demo/dev: run the ingestion pipeline inline (no Celery worker/broker needed).
     ingestion_inline: bool = False
+    # Free-tier / minimal deploy: use in-memory storage/vector/graph + null OCR/reranker
+    # (real LLM + embeddings + Postgres + BM25 still work). Set LITE_MODE=true on Render.
+    lite_mode: bool = False
+    # Single managed-DB URL (e.g. Neon). When set, overrides the per-field db.* config.
+    # Accepts the postgresql:// scheme; the app converts it for asyncpg + handles SSL.
+    database_url: str | None = None
 
     db: DatabaseSettings = Field(default_factory=DatabaseSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
@@ -169,6 +175,26 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
+
+    def resolved_db(self) -> tuple[str, dict]:
+        """Return (async DSN, SQLAlchemy connect_args) — Neon-compatible.
+
+        If `database_url` is set (e.g. by Render env from a Neon connection string),
+        convert scheme to `postgresql+asyncpg`, strip the libpq-only `sslmode=...`
+        query param, and pass `ssl=True` to asyncpg.
+        """
+        if not self.database_url:
+            return self.db.dsn, {}
+
+        import re
+
+        url = self.database_url
+        if url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        elif url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+        url = re.sub(r"[?&]sslmode=[^&]*", "", url).rstrip("?&")
+        return url, {"ssl": True}
 
 
 @lru_cache(maxsize=1)

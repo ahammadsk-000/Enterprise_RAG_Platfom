@@ -12,7 +12,7 @@ from app.integrations.vectorstore.base import VectorStore
 @lru_cache(maxsize=1)
 def get_vector_store() -> VectorStore:
     settings = get_settings()
-    if settings.environment == "test":
+    if settings.environment == "test" or settings.lite_mode:
         from app.integrations.vectorstore.memory import InMemoryVectorStore
 
         return InMemoryVectorStore()

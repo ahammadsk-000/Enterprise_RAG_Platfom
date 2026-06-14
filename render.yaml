@@ -1,0 +1,62 @@
+# Render Blueprint for the Enterprise RAG backend (FastAPI on Python 3.12).
+# Render reads this automatically when you create a "Blueprint" from the repo.
+# Auto-deploy is ON: every push to `main` redeploys the backend.
+#
+# Free-tier shape:
+#   - LITE_MODE=true            -> in-memory storage/vector/graph + null OCR/reranker
+#                                  (real LLM + real Postgres + BM25 still work)
+#   - INGESTION_INLINE=true     -> ingestion runs in-process (no Celery/Redis needed)
+#   - LLM_PROVIDER=openai       -> Groq's OpenAI-compatible API for real LLM answers
+#   - LLM_EMBEDDING_PROVIDER=fake (deterministic) -> BM25 carries retrieval quality
+#   - DATABASE_URL              -> Neon free Postgres (set in dashboard, sync: false)
+# See docs/DEPLOY_FREE.md for the full walkthrough.
+services:
+  - type: web
+    name: enterprise-rag-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /api/v1/healthz
+    buildCommand: pip install -r requirements-deploy.txt
+    startCommand: "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: LITE_MODE
+        value: "true"
+      - key: INGESTION_INLINE
+        value: "true"
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "120"
+      # Strong JWT secret, auto-generated per environment.
+      - key: AUTH_SECRET_KEY
+        generateValue: true
+      # ---- Set these manually in the Render dashboard (sync: false) ----
+      #   DATABASE_URL  -> Neon connection string (postgresql://...?sslmode=require)
+      #   CORS_ORIGINS  -> ["https://<your-app>.vercel.app"]
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      # ---- LLM: Groq (free, OpenAI-compatible). Get a key at console.groq.com. ----
+      - key: LLM_PROVIDER
+        value: openai
+      - key: LLM_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: LLM_CHAT_MODEL
+        value: llama-3.3-70b-versatile
+      - key: LLM_API_KEY
+        sync: false
+      # ---- Embeddings: deterministic fake (BM25 + Postgres FTS handles retrieval) ----
+      # For real semantic embeddings, switch to an OpenAI-compatible embeddings host
+      # (e.g. Voyage / Mistral) and set LLM_EMBEDDING_PROVIDER=openai + dim + key.
+      - key: LLM_EMBEDDING_PROVIDER
+        value: fake
+      - key: LLM_EMBEDDING_DIM
+        value: "64"
