@@ -200,21 +200,45 @@ class Settings(BaseSettings):
         """Return (async DSN, SQLAlchemy connect_args) — Neon-compatible.
 
         If `database_url` is set (e.g. by Render env from a Neon connection string),
-        convert scheme to `postgresql+asyncpg`, strip the libpq-only `sslmode=...`
-        query param, and pass `ssl=True` to asyncpg.
+        convert scheme to `postgresql+asyncpg`, strip libpq-only query params
+        (`sslmode`, `channel_binding`, etc. — asyncpg rejects them), and pass
+        `ssl=True` to asyncpg so the TLS handshake still happens.
         """
         if not self.database_url:
             return self.db.dsn, {}
 
-        import re
+        from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
         url = self.database_url
         if url.startswith("postgresql://"):
-            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            url = "postgresql+asyncpg://" + url[len("postgresql://") :]
         elif url.startswith("postgres://"):
-            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
-        url = re.sub(r"[?&]sslmode=[^&]*", "", url).rstrip("?&")
-        return url, {"ssl": True}
+            url = "postgresql+asyncpg://" + url[len("postgres://") :]
+
+        libpq_only = {
+            "sslmode",
+            "channel_binding",
+            "sslrootcert",
+            "sslcert",
+            "sslkey",
+            "sslpassword",
+            "sslcrl",
+            "application_name",
+            "options",
+            "gssencmode",
+            "target_session_attrs",
+            "connect_timeout",
+        }
+        parts = urlsplit(url)
+        query = [
+            (k, v)
+            for k, v in parse_qsl(parts.query, keep_blank_values=True)
+            if k not in libpq_only
+        ]
+        cleaned = urlunsplit(
+            (parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment)
+        )
+        return cleaned, {"ssl": True}
 
 
 @lru_cache(maxsize=1)
