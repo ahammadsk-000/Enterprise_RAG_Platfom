@@ -75,6 +75,14 @@ class DocumentService:
         digest = content_hash(data)
         existing = await self._docs.find_duplicate(organization_id, digest)
         if existing is not None:
+            # Re-uploading a previously-FAILED doc is a clear "please retry" signal
+            # (often after the user/dev fixed the underlying issue). Re-enqueue rather
+            # than silently handing back the stale failure.
+            if existing.status == DocumentStatus.FAILED.value:
+                existing.status = DocumentStatus.UPLOADED.value
+                existing.error = None
+                await self._session.flush()
+                self._task_bus.enqueue_ingestion(existing.id)
             return existing, True
 
         storage_key = f"orgs/{organization_id}/raw/{digest[:2]}/{digest}"
