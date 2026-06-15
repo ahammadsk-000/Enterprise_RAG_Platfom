@@ -7,7 +7,8 @@ from app.domains.graphrag.extractors.base import EntityExtractor
 
 
 def get_entity_extractor() -> EntityExtractor:
-    if get_settings().environment == "test":
+    settings = get_settings()
+    if settings.environment == "test" or settings.lite_mode:
         from app.domains.graphrag.extractors.rule_based import RuleBasedExtractor
 
         return RuleBasedExtractor()

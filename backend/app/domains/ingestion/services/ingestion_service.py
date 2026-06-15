@@ -101,15 +101,30 @@ class IngestionService:
                 document.status = DocumentStatus.PARSED.value
                 logger.info("ingestion.parsed", document_id=str(document_id), pages=document.page_count)
 
-            if self._graph_builder is not None:
-                entities = await self._run_stage(
-                    document, IngestionStage.GRAPH, lambda: self._build_graph(document, parsed)
-                )
-                document.doc_metadata = {**document.doc_metadata, "graph_entities": entities}
         except Exception as exc:  # noqa: BLE001 - any stage failure marks the doc FAILED
             document.status = DocumentStatus.FAILED.value
             document.error = str(exc)
             logger.exception("ingestion.failed", document_id=str(document_id))
+            await self._session.commit()
+            return
+
+        # Graph extraction is best-effort: a failure here (LLM rate limit, malformed
+        # output, etc.) must NOT sink a document that already parsed/indexed cleanly.
+        if self._graph_builder is not None:
+            try:
+                entities = await self._run_stage(
+                    document, IngestionStage.GRAPH, lambda: self._build_graph(document, parsed)
+                )
+                document.doc_metadata = {**document.doc_metadata, "graph_entities": entities}
+            except Exception as exc:  # noqa: BLE001 - keep doc INDEXED; log + record soft error
+                logger.warning(
+                    "ingestion.graph.skipped",
+                    document_id=str(document_id), error=str(exc),
+                )
+                document.doc_metadata = {
+                    **document.doc_metadata,
+                    "graph_error": str(exc)[:500],
+                }
 
         await self._session.commit()
 
