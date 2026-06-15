@@ -20,6 +20,14 @@ class OpenAILLMProvider:
         self._base_url = settings.base_url.rstrip("/")
         self._api_key = settings.api_key
         self._timeout = settings.request_timeout_s
+        # OpenAI-compatible hosts vary in whether LLM_BASE_URL already includes the
+        # "/v1" prefix (OpenAI's own SDK convention does include it; Ollama's does
+        # not). Accept both shapes so users don't get a 404 from a double "/v1".
+        self._chat_url = self._endpoint("chat/completions")
+
+    def _endpoint(self, path: str) -> str:
+        prefix = "" if self._base_url.endswith("/v1") else "/v1"
+        return f"{self._base_url}{prefix}/{path}"
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._api_key}"} if self._api_key else {}
@@ -41,7 +49,7 @@ class OpenAILLMProvider:
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
                 resp = await client.post(
-                    f"{self._base_url}/v1/chat/completions",
+                    self._chat_url,
                     headers=self._headers(),
                     json=self._payload(messages, temperature, max_tokens, False),
                 )
@@ -64,7 +72,7 @@ class OpenAILLMProvider:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             async with client.stream(
                 "POST",
-                f"{self._base_url}/v1/chat/completions",
+                self._chat_url,
                 headers=self._headers(),
                 json=self._payload(messages, temperature, max_tokens, True),
             ) as resp:
